@@ -1,0 +1,15 @@
+server:
+  http:
+    addr: ":8000"
+
+security:
+  internal_token: "change-me"
+
+postgres:
+  dsn: "postgres://stridewise:stridewise@postgres:5432/stridewise?sslmode=disable"
+
+redis:
+  addr: "redis:6379"
+
+asynq:
+  concurrency: 10

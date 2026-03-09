@@ -1,0 +1,30 @@
+## [2026-03-09 19:53] [Feature]
+- **Change**: 搭建StrideWise后端最小可运行骨架，包含Kratos API、Asynq Worker、Ent Schema、Compose编排与基础测试
+- **Risk Analysis**: 主要风险在于当前仅为骨架实现，业务逻辑与数据库迁移尚未接入实际流程；内部接口统一令牌策略在多环境中需额外管理密钥与轮换。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `docker-compose.yml`
+- `backend/go.mod`
+- `backend/go.sum`
+- `backend/Dockerfile`
+- `backend/Makefile`
+- `backend/config/config.yaml`
+- `backend/migrations/001_init.sql`
+- `backend/cmd/api/main.go`
+- `backend/cmd/worker/main.go`
+- `backend/internal/config/config.go`
+- `backend/internal/middleware/internal_token.go`
+- `backend/internal/middleware/internal_token_test.go`
+- `backend/internal/server/http.go`
+- `backend/internal/task/task.go`
+- `backend/internal/task/task_test.go`
+- `backend/internal/worker/handler.go`
+- `backend/ent/schema/syncjob.go`
+----------------------------------------
+## [2026-03-09 19:53] [Refactor]
+- **Change**: 移除docker-compose版本字段以消除Compose告警并保持配置兼容性
+- **Risk Analysis**: 风险较低，仅影响Compose文件元信息；已通过docker compose config验证。
+- **Risk Level**: S3（低级: 轻微行为偏差或日志/可观测性影响）
+- **Changed Files**:
+- `docker-compose.yml`
+----------------------------------------

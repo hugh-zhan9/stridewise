@@ -1,0 +1,4 @@
+.DS_Store
+running_page/
+backend/bin/
+backend/.env
