@@ -2,6 +2,7 @@ package keep
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -130,6 +131,15 @@ func parseKeepRunData(detail keepRunDetail) (syncjob.RawActivity, time.Time, boo
 	name := fmt.Sprintf("%s from keep", activityType)
 	keepID := extractKeepID(data.ID)
 
+	var summaryPolyline string
+	if geoText, ok := data.GeoPoints.(string); ok && geoText != "" {
+		if points, err := decodeGeoPoints(geoText); err == nil && len(points) > 0 {
+			summaryPolyline = encodePolyline(points)
+		}
+	}
+
+	avgHeartRate := extractAverageHeartRate(data.HeartRate)
+
 	raw := map[string]any{
 		"run_id":            keepID,
 		"name":              name,
@@ -138,8 +148,8 @@ func parseKeepRunData(detail keepRunDetail) (syncjob.RawActivity, time.Time, boo
 		"start_date":        startUTC.Format("2006-01-02 15:04:05"),
 		"start_date_local":  startLocal.Format("2006-01-02 15:04:05"),
 		"data_type":         data.DataType,
-		"summary_polyline":  "",
-		"average_heartrate": nil,
+		"summary_polyline":  summaryPolyline,
+		"average_heartrate": avgHeartRate,
 		"elevation_gain":    nil,
 	}
 
@@ -149,7 +159,7 @@ func parseKeepRunData(detail keepRunDetail) (syncjob.RawActivity, time.Time, boo
 		DistanceM:        data.Distance,
 		MovingTimeSec:    data.Duration,
 		StartTime:        startLocal,
-		SummaryPolyline:  "",
+		SummaryPolyline:  summaryPolyline,
 		Raw:              raw,
 	}, startUTC, true
 }
@@ -178,4 +188,54 @@ func adjustTime(t time.Time, tzName string) time.Time {
 		return t
 	}
 	return t.In(loc)
+}
+
+func decodeGeoPoints(text string) ([][2]float64, error) {
+	points, err := decodeRunmapData(text, true)
+	if err != nil {
+		return nil, err
+	}
+	out := make([][2]float64, 0, len(points))
+	for _, p := range points {
+		lat, okLat := toFloat64(p["latitude"])
+		lng, okLng := toFloat64(p["longitude"])
+		if !okLat || !okLng {
+			continue
+		}
+		lat, lng = gcj2wgs(lat, lng)
+		out = append(out, [2]float64{lat, lng})
+	}
+	return out, nil
+}
+
+func extractAverageHeartRate(v any) any {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil
+	}
+	if avg, ok := m["averageHeartRate"]; ok {
+		return avg
+	}
+	return nil
+}
+
+func toFloat64(v any) (float64, bool) {
+	switch t := v.(type) {
+	case float64:
+		return t, true
+	case float32:
+		return float64(t), true
+	case int:
+		return float64(t), true
+	case int64:
+		return float64(t), true
+	case json.Number:
+		f, err := t.Float64()
+		if err != nil {
+			return 0, false
+		}
+		return f, true
+	default:
+		return 0, false
+	}
 }
