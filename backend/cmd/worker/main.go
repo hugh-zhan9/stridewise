@@ -39,7 +39,7 @@ func main() {
 
 	store := storage.NewPostgresStore(pool)
 	processor := syncjob.NewProcessor(store, map[string]syncjob.Connector{
-		"keep":   keepconnector.New(cfg.Keep.DataFile),
+		"keep":   keepconnector.NewLive(cfg.Keep.PhoneNumber, cfg.Keep.Password, "", nil),
 		"strava": stravaconnector.New(cfg.Strava.DataFile),
 		"garmin": garminconnector.New(cfg.Garmin.DataFile),
 		"nike":   nikeconnector.New(cfg.Nike.DataFile),

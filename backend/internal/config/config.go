@@ -25,7 +25,9 @@ type Config struct {
 		Concurrency int `yaml:"concurrency"`
 	} `yaml:"asynq"`
 	Keep struct {
-		DataFile string `yaml:"data_file"`
+		DataFile    string `yaml:"data_file"`
+		PhoneNumber string `yaml:"phone_number"`
+		Password    string `yaml:"password"`
 	} `yaml:"keep"`
 	Strava struct {
 		DataFile string `yaml:"data_file"`

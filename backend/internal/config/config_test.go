@@ -26,6 +26,8 @@ asynq:
   concurrency: 5
 keep:
   data_file: "keep.json"
+  phone_number: "13000000000"
+  password: "pass"
 strava:
   data_file: "strava.json"
 garmin:
@@ -49,6 +51,12 @@ fit:
 	}
 	if cfg.Keep.DataFile != "keep.json" {
 		t.Fatalf("expected keep data_file")
+	}
+	if cfg.Keep.PhoneNumber != "13000000000" {
+		t.Fatalf("expected keep phone_number")
+	}
+	if cfg.Keep.Password != "pass" {
+		t.Fatalf("expected keep password")
 	}
 	if cfg.Strava.DataFile != "strava.json" {
 		t.Fatalf("expected strava data_file")
