@@ -109,54 +109,60 @@ type TrainingLoadSummary struct {
 }
 
 type Activity struct {
-	UserID         string
-	DistanceM      float64
-	MovingTimeSec  int
-	StartTimeLocal time.Time
+	ID               int64
+	UserID           string
+	Source           string
+	SourceActivityID string
+	Name             string
+	DistanceM        float64
+	MovingTimeSec    int
+	StartTimeLocal   time.Time
 }
 
 type BaselineCurrent struct {
-	UserID            string
-	ComputedAt        time.Time
-	DataSessions7d    int
-	AcuteLoadSRPE     float64
-	ChronicLoadSRPE   float64
-	ACWRSRPE          float64
-	AcuteLoadDistance float64
+	UserID              string
+	ComputedAt          time.Time
+	DataSessions7d      int
+	AcuteLoadSRPE       float64
+	ChronicLoadSRPE     float64
+	ACWRSRPE            float64
+	AcuteLoadDistance   float64
 	ChronicLoadDistance float64
-	ACWRDistance      float64
-	Monotony          float64
-	Strain            float64
-	PaceAvgSecPerKM   int
-	PaceLowSecPerKM   int
-	PaceHighSecPerKM  int
-	Status            string
+	ACWRDistance        float64
+	Monotony            float64
+	Strain              float64
+	PaceAvgSecPerKM     int
+	PaceLowSecPerKM     int
+	PaceHighSecPerKM    int
+	Status              string
 }
 
 type BaselineHistory struct {
-	BaselineID        string
-	UserID            string
-	ComputedAt        time.Time
-	TriggerType       string
-	TriggerRef        string
-	DataSessions7d    int
-	AcuteLoadSRPE     float64
-	ChronicLoadSRPE   float64
-	ACWRSRPE          float64
-	AcuteLoadDistance float64
+	BaselineID          string
+	UserID              string
+	ComputedAt          time.Time
+	TriggerType         string
+	TriggerRef          string
+	DataSessions7d      int
+	AcuteLoadSRPE       float64
+	ChronicLoadSRPE     float64
+	ACWRSRPE            float64
+	AcuteLoadDistance   float64
 	ChronicLoadDistance float64
-	ACWRDistance      float64
-	Monotony          float64
-	Strain            float64
-	PaceAvgSecPerKM   int
-	PaceLowSecPerKM   int
-	PaceHighSecPerKM  int
-	Status            string
+	ACWRDistance        float64
+	Monotony            float64
+	Strain              float64
+	PaceAvgSecPerKM     int
+	PaceLowSecPerKM     int
+	PaceHighSecPerKM    int
+	Status              string
 }
 
 type TrainingSummary struct {
 	SummaryID        string
 	UserID           string
+	SourceType       string
+	SourceID         string
 	LogID            string
 	CompletionRate   string
 	IntensityMatch   string
@@ -172,8 +178,11 @@ type TrainingSummary struct {
 type TrainingFeedback struct {
 	FeedbackID string
 	UserID     string
+	SourceType string
+	SourceID   string
 	LogID      string
 	Content    string
+	DeletedAt  *time.Time
 	CreatedAt  time.Time
 }
 
@@ -508,12 +517,13 @@ func (s *PostgresStore) GetBaselineCurrent(ctx context.Context, userID string) (
 func (s *PostgresStore) UpsertTrainingSummary(ctx context.Context, summary TrainingSummary) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO training_summaries (
-			summary_id, user_id, log_id, completion_rate, intensity_match, recovery_advice,
+			summary_id, user_id, source_type, source_id, log_id, completion_rate, intensity_match, recovery_advice,
 			anomaly_notes, performance_notes, next_suggestion, deleted_at, created_at, updated_at
 		)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW(),NOW())
-		ON CONFLICT (log_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NOW(),NOW())
+		ON CONFLICT (user_id, source_type, source_id)
 		DO UPDATE SET
+			log_id=EXCLUDED.log_id,
 			completion_rate=EXCLUDED.completion_rate,
 			intensity_match=EXCLUDED.intensity_match,
 			recovery_advice=EXCLUDED.recovery_advice,
@@ -522,21 +532,25 @@ func (s *PostgresStore) UpsertTrainingSummary(ctx context.Context, summary Train
 			next_suggestion=EXCLUDED.next_suggestion,
 			deleted_at=EXCLUDED.deleted_at,
 			updated_at=NOW()
-	`, summary.SummaryID, summary.UserID, summary.LogID, summary.CompletionRate, summary.IntensityMatch, summary.RecoveryAdvice,
+	`, summary.SummaryID, summary.UserID, summary.SourceType, summary.SourceID, summary.LogID, summary.CompletionRate, summary.IntensityMatch, summary.RecoveryAdvice,
 		summary.AnomalyNotes, summary.PerformanceNotes, summary.NextSuggestion, summary.DeletedAt)
 	return err
 }
 
 func (s *PostgresStore) GetTrainingSummary(ctx context.Context, logID string) (TrainingSummary, error) {
+	return s.GetTrainingSummaryBySource(ctx, "log", logID)
+}
+
+func (s *PostgresStore) GetTrainingSummaryBySource(ctx context.Context, sourceType, sourceID string) (TrainingSummary, error) {
 	var out TrainingSummary
 	err := s.pool.QueryRow(ctx, `
-		SELECT summary_id, user_id, log_id, completion_rate, intensity_match,
+		SELECT summary_id, user_id, source_type, source_id, log_id, completion_rate, intensity_match,
 		       recovery_advice, anomaly_notes, performance_notes, next_suggestion,
 		       deleted_at, created_at, updated_at
 		FROM training_summaries
-		WHERE log_id=$1
-	`, logID).Scan(
-		&out.SummaryID, &out.UserID, &out.LogID, &out.CompletionRate, &out.IntensityMatch,
+		WHERE source_type=$1 AND source_id=$2 AND deleted_at IS NULL
+	`, sourceType, sourceID).Scan(
+		&out.SummaryID, &out.UserID, &out.SourceType, &out.SourceID, &out.LogID, &out.CompletionRate, &out.IntensityMatch,
 		&out.RecoveryAdvice, &out.AnomalyNotes, &out.PerformanceNotes, &out.NextSuggestion,
 		&out.DeletedAt, &out.CreatedAt, &out.UpdatedAt,
 	)
@@ -548,13 +562,25 @@ func (s *PostgresStore) GetTrainingSummary(ctx context.Context, logID string) (T
 
 func (s *PostgresStore) ListTrainingSummaries(ctx context.Context, userID string, from time.Time, to time.Time) ([]TrainingSummary, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT s.summary_id, s.user_id, s.log_id, s.completion_rate, s.intensity_match,
-		       s.recovery_advice, s.anomaly_notes, s.performance_notes, s.next_suggestion,
-		       s.deleted_at, s.created_at, s.updated_at
-		FROM training_summaries s
-		JOIN training_logs l ON l.log_id = s.log_id
-		WHERE s.user_id=$1 AND s.deleted_at IS NULL AND l.deleted_at IS NULL AND l.start_time >= $2 AND l.start_time <= $3
-		ORDER BY l.start_time DESC
+		SELECT summary_id, user_id, source_type, source_id, log_id, completion_rate, intensity_match,
+		       recovery_advice, anomaly_notes, performance_notes, next_suggestion,
+		       deleted_at, created_at, updated_at, sort_time
+		FROM (
+			SELECT s.summary_id, s.user_id, s.source_type, s.source_id, s.log_id, s.completion_rate, s.intensity_match,
+			       s.recovery_advice, s.anomaly_notes, s.performance_notes, s.next_suggestion,
+			       s.deleted_at, s.created_at, s.updated_at, l.start_time AS sort_time
+			FROM training_summaries s
+			JOIN training_logs l ON s.source_type='log' AND s.source_id = l.log_id
+			WHERE s.user_id=$1 AND s.deleted_at IS NULL AND l.deleted_at IS NULL AND l.start_time >= $2 AND l.start_time <= $3
+			UNION ALL
+			SELECT s.summary_id, s.user_id, s.source_type, s.source_id, s.log_id, s.completion_rate, s.intensity_match,
+			       s.recovery_advice, s.anomaly_notes, s.performance_notes, s.next_suggestion,
+			       s.deleted_at, s.created_at, s.updated_at, a.start_time_local AS sort_time
+			FROM training_summaries s
+			JOIN activities a ON s.source_type='activity' AND s.source_id = a.id::text
+			WHERE s.user_id=$1 AND s.deleted_at IS NULL AND a.start_time_local >= $2 AND a.start_time_local <= $3
+		) summaries
+		ORDER BY sort_time DESC
 	`, userID, from, to)
 	if err != nil {
 		return nil, err
@@ -564,10 +590,11 @@ func (s *PostgresStore) ListTrainingSummaries(ctx context.Context, userID string
 	var out []TrainingSummary
 	for rows.Next() {
 		var s2 TrainingSummary
+		var sortTime time.Time
 		if err := rows.Scan(
-			&s2.SummaryID, &s2.UserID, &s2.LogID, &s2.CompletionRate, &s2.IntensityMatch,
+			&s2.SummaryID, &s2.UserID, &s2.SourceType, &s2.SourceID, &s2.LogID, &s2.CompletionRate, &s2.IntensityMatch,
 			&s2.RecoveryAdvice, &s2.AnomalyNotes, &s2.PerformanceNotes, &s2.NextSuggestion,
-			&s2.DeletedAt, &s2.CreatedAt, &s2.UpdatedAt,
+			&s2.DeletedAt, &s2.CreatedAt, &s2.UpdatedAt, &sortTime,
 		); err != nil {
 			return nil, err
 		}
@@ -581,9 +608,27 @@ func (s *PostgresStore) ListTrainingSummaries(ctx context.Context, userID string
 
 func (s *PostgresStore) CreateTrainingFeedback(ctx context.Context, feedback TrainingFeedback) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO training_feedbacks (feedback_id, user_id, log_id, content, created_at)
-		VALUES ($1,$2,$3,$4,NOW())
-	`, feedback.FeedbackID, feedback.UserID, feedback.LogID, feedback.Content)
+		INSERT INTO training_feedbacks (feedback_id, user_id, source_type, source_id, log_id, content, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,NOW())
+	`, feedback.FeedbackID, feedback.UserID, feedback.SourceType, feedback.SourceID, feedback.LogID, feedback.Content)
+	return err
+}
+
+func (s *PostgresStore) SoftDeleteTrainingSummaryBySource(ctx context.Context, sourceType, sourceID string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE training_summaries
+		SET deleted_at=NOW(), updated_at=NOW()
+		WHERE source_type=$1 AND source_id=$2 AND deleted_at IS NULL
+	`, sourceType, sourceID)
+	return err
+}
+
+func (s *PostgresStore) SoftDeleteTrainingFeedbackBySource(ctx context.Context, sourceType, sourceID string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE training_feedbacks
+		SET deleted_at=NOW()
+		WHERE source_type=$1 AND source_id=$2 AND deleted_at IS NULL
+	`, sourceType, sourceID)
 	return err
 }
 
@@ -653,7 +698,7 @@ func (s *PostgresStore) HasTrainingConflict(ctx context.Context, userID string, 
 
 func (s *PostgresStore) ListActivities(ctx context.Context, userID string, from time.Time, to time.Time) ([]Activity, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT user_id, distance_m, moving_time_sec, start_time_local
+		SELECT id, user_id, source, source_activity_id, name, distance_m, moving_time_sec, start_time_local
 		FROM activities
 		WHERE user_id=$1 AND start_time_local >= $2 AND start_time_local <= $3
 		ORDER BY start_time_local DESC
@@ -666,7 +711,34 @@ func (s *PostgresStore) ListActivities(ctx context.Context, userID string, from 
 	var out []Activity
 	for rows.Next() {
 		var a Activity
-		if err := rows.Scan(&a.UserID, &a.DistanceM, &a.MovingTimeSec, &a.StartTimeLocal); err != nil {
+		if err := rows.Scan(&a.ID, &a.UserID, &a.Source, &a.SourceActivityID, &a.Name, &a.DistanceM, &a.MovingTimeSec, &a.StartTimeLocal); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	return out, nil
+}
+
+func (s *PostgresStore) ListActivitiesBySyncJob(ctx context.Context, jobID string) ([]Activity, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT a.id, a.user_id, a.source, a.source_activity_id, a.name, a.distance_m, a.moving_time_sec, a.start_time_local
+		FROM activities a
+		JOIN raw_activities r ON r.user_id = a.user_id AND r.source = a.source AND r.source_activity_id = a.source_activity_id
+		WHERE r.job_id=$1
+		ORDER BY a.start_time_local DESC
+	`, jobID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Activity
+	for rows.Next() {
+		var a Activity
+		if err := rows.Scan(&a.ID, &a.UserID, &a.Source, &a.SourceActivityID, &a.Name, &a.DistanceM, &a.MovingTimeSec, &a.StartTimeLocal); err != nil {
 			return nil, err
 		}
 		out = append(out, a)
