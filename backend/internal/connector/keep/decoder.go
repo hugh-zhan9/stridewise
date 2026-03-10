@@ -40,6 +40,7 @@ func decodeRunmapData(text string, isGeo bool) ([]map[string]any, error) {
 			return nil, errors.New("keep encrypted payload size invalid")
 		}
 		cipher.NewCBCDecrypter(block, iv).CryptBlocks(raw, raw)
+		raw = pkcs7Unpad(raw, block.BlockSize())
 	}
 
 	gz, err := gzip.NewReader(bytes.NewReader(raw))
@@ -58,6 +59,22 @@ func decodeRunmapData(text string, isGeo bool) ([]map[string]any, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+func pkcs7Unpad(in []byte, blockSize int) []byte {
+	if len(in) == 0 || len(in)%blockSize != 0 {
+		return in
+	}
+	pad := int(in[len(in)-1])
+	if pad == 0 || pad > blockSize || pad > len(in) {
+		return in
+	}
+	for i := len(in) - pad; i < len(in); i++ {
+		if int(in[i]) != pad {
+			return in
+		}
+	}
+	return in[:len(in)-pad]
 }
 
 func gcj2wgs(lat, lng float64) (float64, float64) {
