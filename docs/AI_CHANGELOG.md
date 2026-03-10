@@ -130,3 +130,15 @@
 - **Changed Files**:
 - (未检测到变更文件或当前目录非 git 仓库)
 ----------------------------------------
+## [2026-03-10 14:38] [Feature]
+- **Change**: 新增用户档案与天气模块存储、接口与风险分级
+- **Risk Analysis**: 风险：位置校验较严格可能拒绝边界输入；Mock 天气数据为固定值，未接入真实源；新增迁移未执行会导致接口落库失败。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/weather/risk.go`
+- `backend/internal/weather/provider.go`
+- `backend/internal/storage/postgres.go`
+- `backend/internal/server/http.go`
+- `backend/cmd/api/main.go`
+- `backend/migrations/003_user_weather.sql`
+----------------------------------------
