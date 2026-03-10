@@ -2,3 +2,4 @@
 running_page/
 backend/bin/
 backend/.env
+.worktrees/
