@@ -1,4 +1,4 @@
-package keep
+package garmin
 
 import (
 	"context"
@@ -18,7 +18,7 @@ func New(dataFile string) *Connector {
 
 func (c *Connector) FetchActivities(_ context.Context, _ string, checkpoint syncjob.Checkpoint) (syncjob.FetchResult, error) {
 	if c.DataFile == "" {
-		return syncjob.FetchResult{}, errors.New("keep data_file is empty")
+		return syncjob.FetchResult{}, errors.New("garmin data_file is empty")
 	}
 	return common.ParseRunningPageJSON(c.DataFile, checkpoint)
 }

@@ -1,4 +1,4 @@
-package keep
+package strava
 
 import (
 	"os"
@@ -7,7 +7,7 @@ import (
 	syncjob "stridewise/backend/internal/sync"
 )
 
-func TestConnector_FetchActivities_FallbackStartDate(t *testing.T) {
+func TestConnector_FetchActivities(t *testing.T) {
 	tmp, err := os.CreateTemp("", "activities-*.json")
 	if err != nil {
 		t.Fatalf("temp: %v", err)
@@ -15,7 +15,7 @@ func TestConnector_FetchActivities_FallbackStartDate(t *testing.T) {
 	t.Cleanup(func() { _ = os.Remove(tmp.Name()) })
 
 	payload := `[
-      {"run_id": "a1", "name": "x", "distance": 1000, "moving_time": "0:10:00", "start_date": "2026-01-03 00:00:00+00:00", "start_date_local": "invalid"}
+      {"run_id": 1, "name": "a", "distance": 1000, "moving_time": "0:10:00", "start_date_local": "2026-01-01 08:00:00"}
     ]`
 	if _, err := tmp.WriteString(payload); err != nil {
 		t.Fatalf("write: %v", err)
@@ -37,7 +37,7 @@ func TestConnector_EmptyDataFile(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if err.Error() != "keep data_file is empty" {
+	if err.Error() != "strava data_file is empty" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
