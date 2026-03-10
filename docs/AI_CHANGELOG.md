@@ -254,3 +254,14 @@
 - `backend/internal/recommendation/rules_test.go`
 - `backend/internal/recommendation/types.go`
 ----------------------------------------
+## [2026-03-10 18:37] [Feature]
+- **Change**: 新增建议生成编排器
+- **Risk Analysis**: 新增建议编排器与训练负荷/天气回退逻辑，涉及AI调用与规则覆盖；若输入拼装或回退策略错误可能影响建议准确性
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/recommendation/processor.go`
+- `backend/internal/recommendation/processor_test.go`
+- `backend/internal/recommendation/types.go`
+- `backend/internal/recommendation/rules.go`
+- `backend/internal/storage/postgres.go`
+----------------------------------------

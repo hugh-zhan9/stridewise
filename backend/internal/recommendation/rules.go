@@ -13,13 +13,11 @@ type RuleResult struct {
 
 func ApplyRules(input RuleInput, output RecommendationOutput) RuleResult {
 	override := ""
-	if input.WeatherRisk == "red" {
-		override = "weather_red"
-	}
 	if input.HasDiscomfort {
 		override = "user_discomfort"
-	}
-	if input.HighLoad {
+	} else if input.WeatherRisk == "red" {
+		override = "weather_red"
+	} else if input.HighLoad {
 		override = "high_load"
 	}
 	if override != "" {

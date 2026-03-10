@@ -102,6 +102,12 @@ type RecommendationFeedback struct {
 	CreatedAt  time.Time
 }
 
+type TrainingLoadSummary struct {
+	Sessions int
+	Distance float64
+	Duration int
+}
+
 type Activity struct {
 	UserID         string
 	DistanceM      float64
@@ -722,6 +728,56 @@ func (s *PostgresStore) GetTrainingLog(ctx context.Context, logID string) (Train
 	return log, nil
 }
 
+func (s *PostgresStore) GetRecentTrainingSummary(ctx context.Context, userID string, from time.Time, to time.Time) (TrainingLoadSummary, error) {
+	var logDistance float64
+	var logDuration int
+	var logCount int
+	err := s.pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(distance_km),0), COALESCE(SUM(duration_sec),0), COUNT(*)
+		FROM training_logs
+		WHERE user_id=$1 AND deleted_at IS NULL AND start_time >= $2 AND start_time <= $3
+	`, userID, from, to).Scan(&logDistance, &logDuration, &logCount)
+	if err != nil {
+		return TrainingLoadSummary{}, err
+	}
+
+	var actDistanceM float64
+	var actDuration int
+	var actCount int
+	err = s.pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(distance_m),0), COALESCE(SUM(moving_time_sec),0), COUNT(*)
+		FROM activities
+		WHERE user_id=$1 AND start_time_local >= $2 AND start_time_local <= $3
+	`, userID, from, to).Scan(&actDistanceM, &actDuration, &actCount)
+	if err != nil {
+		return TrainingLoadSummary{}, err
+	}
+
+	return TrainingLoadSummary{
+		Sessions: logCount + actCount,
+		Distance: logDistance + actDistanceM/1000.0,
+		Duration: logDuration + actDuration,
+	}, nil
+}
+
+func (s *PostgresStore) GetLatestTrainingDiscomfort(ctx context.Context, userID string) (bool, error) {
+	var discomfort bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT discomfort
+		FROM training_logs
+		WHERE user_id=$1 AND deleted_at IS NULL
+		ORDER BY start_time DESC
+		LIMIT 1
+	`, userID).Scan(&discomfort)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return discomfort, nil
+}
+
 func (s *PostgresStore) UpsertUserProfile(ctx context.Context, p UserProfile) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO user_profiles (
@@ -804,6 +860,25 @@ func (s *PostgresStore) GetWeatherSnapshot(ctx context.Context, userID string, d
 		FROM weather_snapshots
 		WHERE user_id=$1 AND date=$2
 	`, userID, date).Scan(
+		&w.UserID, &w.Date, &w.TemperatureC, &w.FeelsLikeC, &w.Humidity,
+		&w.WindSpeedMS, &w.PrecipitationProb, &w.AQI, &w.UVIndex, &w.RiskLevel, &w.CreatedAt,
+	)
+	if err != nil {
+		return WeatherSnapshot{}, err
+	}
+	return w, nil
+}
+
+func (s *PostgresStore) GetLatestWeatherSnapshot(ctx context.Context, userID string) (WeatherSnapshot, error) {
+	var w WeatherSnapshot
+	err := s.pool.QueryRow(ctx, `
+		SELECT user_id, date, temperature_c, feels_like_c, humidity,
+		       wind_speed_ms, precipitation_prob, aqi, uv_index, risk_level, created_at
+		FROM weather_snapshots
+		WHERE user_id=$1
+		ORDER BY date DESC
+		LIMIT 1
+	`, userID).Scan(
 		&w.UserID, &w.Date, &w.TemperatureC, &w.FeelsLikeC, &w.Humidity,
 		&w.WindSpeedMS, &w.PrecipitationProb, &w.AQI, &w.UVIndex, &w.RiskLevel, &w.CreatedAt,
 	)
