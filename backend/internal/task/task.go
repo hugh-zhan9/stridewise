@@ -7,6 +7,7 @@ import (
 
 const TypeSyncJob = "sync:job"
 const TypeTrainingRecalc = "training:recalc"
+const TypeBaselineRecalc = "baseline:recalc"
 
 var allowedSources = map[string]struct{}{
 	"keep":   {},
@@ -30,6 +31,13 @@ type TrainingRecalcPayload struct {
 	UserID    string `json:"user_id"`
 	LogID     string `json:"log_id"`
 	Operation string `json:"operation"`
+}
+
+type BaselineRecalcPayload struct {
+	JobID       string `json:"job_id"`
+	UserID      string `json:"user_id"`
+	TriggerType string `json:"trigger_type"`
+	TriggerRef  string `json:"trigger_ref"`
 }
 
 func EncodeSyncJobPayload(p SyncJobPayload) ([]byte, error) {
@@ -97,6 +105,42 @@ func DecodeTrainingRecalcPayload(b []byte) (TrainingRecalcPayload, error) {
 	}
 	if p.Operation != "create" && p.Operation != "update" && p.Operation != "delete" {
 		return TrainingRecalcPayload{}, errors.New("operation invalid")
+	}
+	return p, nil
+}
+
+func EncodeBaselineRecalcPayload(p BaselineRecalcPayload) ([]byte, error) {
+	if p.JobID == "" {
+		return nil, errors.New("job_id is required")
+	}
+	if p.UserID == "" {
+		return nil, errors.New("user_id is required")
+	}
+	if p.TriggerType == "" {
+		return nil, errors.New("trigger_type is required")
+	}
+	if p.TriggerRef == "" {
+		return nil, errors.New("trigger_ref is required")
+	}
+	return json.Marshal(p)
+}
+
+func DecodeBaselineRecalcPayload(b []byte) (BaselineRecalcPayload, error) {
+	var p BaselineRecalcPayload
+	if err := json.Unmarshal(b, &p); err != nil {
+		return BaselineRecalcPayload{}, err
+	}
+	if p.JobID == "" {
+		return BaselineRecalcPayload{}, errors.New("job_id is required")
+	}
+	if p.UserID == "" {
+		return BaselineRecalcPayload{}, errors.New("user_id is required")
+	}
+	if p.TriggerType == "" {
+		return BaselineRecalcPayload{}, errors.New("trigger_type is required")
+	}
+	if p.TriggerRef == "" {
+		return BaselineRecalcPayload{}, errors.New("trigger_ref is required")
 	}
 	return p, nil
 }

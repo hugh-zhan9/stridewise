@@ -91,6 +91,7 @@ func main() {
 		mockProvider,
 		store,
 		store,
+		store,
 	)
 	app := kratos.New(
 		kratos.Name("stridewise-api"),

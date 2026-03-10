@@ -47,6 +47,17 @@ type Config struct {
 	FIT struct {
 		DataFile string `yaml:"data_file"`
 	} `yaml:"fit"`
+	AI struct {
+		Provider string `yaml:"provider"`
+		OpenAI   struct {
+			APIKey      string  `yaml:"api_key"`
+			BaseURL     string  `yaml:"base_url"`
+			Model       string  `yaml:"model"`
+			TimeoutMs   int     `yaml:"timeout_ms"`
+			MaxTokens   int     `yaml:"max_tokens"`
+			Temperature float64 `yaml:"temperature"`
+		} `yaml:"openai"`
+	} `yaml:"ai"`
 }
 
 func Load(path string) (*Config, error) {
@@ -63,6 +74,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Asynq.Concurrency == 0 {
 		cfg.Asynq.Concurrency = 10
+	}
+	if cfg.AI.Provider == "" {
+		cfg.AI.Provider = "openai"
 	}
 	return &cfg, nil
 }

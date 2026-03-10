@@ -56,13 +56,22 @@ type Store interface {
 	AppendSyncError(ctx context.Context, jobID, source, errorMessage string, retryable bool) error
 }
 
+type BaselineRecalcEnqueuer interface {
+	EnqueueBaselineRecalc(ctx context.Context, userID, triggerType, triggerRef string) error
+}
+
 type Processor struct {
-	store      Store
-	connectors map[string]Connector
+	store            Store
+	connectors       map[string]Connector
+	baselineEnqueuer BaselineRecalcEnqueuer
 }
 
 func NewProcessor(store Store, connectors map[string]Connector) *Processor {
 	return &Processor{store: store, connectors: connectors}
+}
+
+func (p *Processor) SetBaselineEnqueuer(enqueuer BaselineRecalcEnqueuer) {
+	p.baselineEnqueuer = enqueuer
 }
 
 func (p *Processor) ProcessSyncJob(ctx context.Context, jobID, userID, source string, retryCount int) error {
@@ -122,6 +131,11 @@ func (p *Processor) ProcessSyncJob(ctx context.Context, jobID, userID, source st
 
 	if err := p.store.MarkSuccess(ctx, jobID, len(canonical)); err != nil {
 		return err
+	}
+	if p.baselineEnqueuer != nil {
+		if err := p.baselineEnqueuer.EnqueueBaselineRecalc(ctx, userID, "sync", jobID); err != nil {
+			_ = p.store.AppendSyncError(ctx, jobID, source, "enqueue baseline recalc failed: "+err.Error(), true)
+		}
 	}
 	return nil
 }

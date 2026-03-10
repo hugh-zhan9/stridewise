@@ -155,3 +155,75 @@
 - `backend/internal/worker/handler.go`
 - `backend/migrations/004_training_logs.sql`
 ----------------------------------------
+## [2026-03-10 17:13] [Feature]
+- **Change**: 新增基线计算核心逻辑
+- **Risk Analysis**: 新增基础计算函数，后续指标依赖可能产生计算偏差；当前仅新增文件，风险低
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/baseline/calc.go`
+- `backend/internal/baseline/calc_test.go`
+----------------------------------------
+## [2026-03-10 17:14] [Feature]
+- **Change**: 完善基线计算指标
+- **Risk Analysis**: 新增ACWR、单调性、压力与门槛逻辑，可能影响后续基线解释；计算基于输入数据，风险中低
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/baseline/calc.go`
+- `backend/internal/baseline/calc_test.go`
+----------------------------------------
+## [2026-03-10 17:16] [Feature]
+- **Change**: 新增基线与训练总结存储
+- **Risk Analysis**: 新增基线/总结表结构与存储方法，若字段映射错误会影响读写一致性；当前为新表新增，风险中
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/migrations/005_baseline_summary.sql`
+- `backend/internal/storage/postgres.go`
+- `backend/internal/storage/postgres_baseline_test.go`
+----------------------------------------
+## [2026-03-10 17:22] [Feature]
+- **Change**: 新增基线重算任务与处理器
+- **Risk Analysis**: 新增baseline:recalc任务、处理器与worker路由，可能影响异步任务流转；新功能风险中
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/task/task.go`
+- `backend/internal/task/task_baseline_test.go`
+- `backend/internal/baseline/processor.go`
+- `backend/internal/baseline/processor_test.go`
+- `backend/internal/worker/handler.go`
+- `backend/internal/worker/handler_baseline_test.go`
+- `backend/cmd/worker/main.go`
+----------------------------------------
+## [2026-03-10 17:29] [Feature]
+- **Change**: 新增基线查询与总结接口并触发重算
+- **Risk Analysis**: 新增基线/总结API与同步后重算触发，涉及HTTP路由与任务入队；接口参数或触发条件错误会影响功能可用性
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/server/http.go`
+- `backend/internal/server/http_baseline_test.go`
+- `backend/internal/server/http_training_test.go`
+- `backend/internal/server/http_user_weather_test.go`
+- `backend/cmd/api/main.go`
+- `backend/internal/sync/processor.go`
+- `backend/internal/sync/processor_test.go`
+- `backend/internal/asyncjob/baseline_enqueuer.go`
+- `backend/cmd/worker/main.go`
+----------------------------------------
+## [2026-03-10 17:38] [Feature]
+- **Change**: 接入AI训练总结与基线重算扩展
+- **Risk Analysis**: 新增OpenAI Summarizer、基线处理器生成总结与同步触发逻辑，涉及异步任务与HTTP接口；若AI配置错误或接口变更可能导致总结失败但基线仍可用
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/ai/summarizer.go`
+- `backend/internal/ai/openai.go`
+- `backend/internal/ai/openai_test.go`
+- `backend/internal/baseline/processor.go`
+- `backend/internal/baseline/processor_test.go`
+- `backend/internal/storage/postgres.go`
+- `backend/internal/storage/postgres_baseline_test.go`
+- `backend/internal/sync/processor.go`
+- `backend/internal/sync/processor_test.go`
+- `backend/internal/asyncjob/baseline_enqueuer.go`
+- `backend/internal/config/config.go`
+- `backend/config/config.yaml`
+- `backend/cmd/worker/main.go`
+----------------------------------------

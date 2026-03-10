@@ -69,6 +69,13 @@ type AsyncJobStore interface {
 	UpdateAsyncJobStatus(ctx context.Context, jobID, status string, retryCount int, errMsg string) error
 }
 
+type BaselineStore interface {
+	GetBaselineCurrent(ctx context.Context, userID string) (storage.BaselineCurrent, error)
+	ListBaselineHistory(ctx context.Context, userID string, from time.Time, to time.Time) ([]storage.BaselineHistory, error)
+	ListTrainingSummaries(ctx context.Context, userID string, from time.Time, to time.Time) ([]storage.TrainingSummary, error)
+	CreateTrainingFeedback(ctx context.Context, feedback storage.TrainingFeedback) error
+}
+
 type createSyncJobRequest struct {
 	UserID string `json:"user_id"`
 	Source string `json:"source"`
@@ -110,6 +117,12 @@ type trainingLogRequest struct {
 	Discomfort         bool    `json:"discomfort"`
 }
 
+type trainingFeedbackRequest struct {
+	UserID  string `json:"user_id"`
+	LogID   string `json:"log_id"`
+	Content string `json:"content"`
+}
+
 func NewHTTPServer(
 	addr string,
 	internalToken string,
@@ -122,6 +135,7 @@ func NewHTTPServer(
 	weatherProvider WeatherProvider,
 	trainingStore TrainingLogStore,
 	asyncJobStore AsyncJobStore,
+	baselineStore BaselineStore,
 ) *kratoshttp.Server {
 	if addr == "" {
 		addr = ":8000"
@@ -419,7 +433,7 @@ func NewHTTPServer(
 				http.Error(w, "create training log failed", http.StatusInternalServerError)
 				return
 			}
-			jobID, err := enqueueTrainingRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, log.LogID, "create")
+			jobID, err := enqueueBaselineRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, "training_create", log.LogID)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusServiceUnavailable)
 				return
@@ -501,7 +515,7 @@ func NewHTTPServer(
 				http.Error(w, "update training log failed", http.StatusInternalServerError)
 				return
 			}
-			jobID, err := enqueueTrainingRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, log.LogID, "update")
+			jobID, err := enqueueBaselineRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, "training_update", log.LogID)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusServiceUnavailable)
 				return
@@ -525,7 +539,7 @@ func NewHTTPServer(
 				http.Error(w, "delete training log failed", http.StatusInternalServerError)
 				return
 			}
-			jobID, err := enqueueTrainingRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, logID, "delete")
+			jobID, err := enqueueBaselineRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, "training_delete", logID)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusServiceUnavailable)
 				return
@@ -534,6 +548,139 @@ func NewHTTPServer(
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	}))
+
+	srv.Handle("/internal/v1/baseline/current", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if baselineStore == nil {
+			http.Error(w, "baseline subsystem unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		userID := r.URL.Query().Get("user_id")
+		if userID == "" {
+			http.Error(w, "user_id required", http.StatusBadRequest)
+			return
+		}
+		current, err := baselineStore.GetBaselineCurrent(r.Context(), userID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				http.Error(w, "baseline not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, "get baseline failed", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, current)
+	}))
+
+	srv.Handle("/internal/v1/baseline/history", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if baselineStore == nil {
+			http.Error(w, "baseline subsystem unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		userID := r.URL.Query().Get("user_id")
+		if userID == "" {
+			http.Error(w, "user_id required", http.StatusBadRequest)
+			return
+		}
+		from, err := parseRangeTime(r.URL.Query().Get("from"), false)
+		if err != nil {
+			http.Error(w, "invalid from", http.StatusBadRequest)
+			return
+		}
+		to, err := parseRangeTime(r.URL.Query().Get("to"), true)
+		if err != nil {
+			http.Error(w, "invalid to", http.StatusBadRequest)
+			return
+		}
+		if from.IsZero() {
+			from = time.Unix(0, 0)
+		}
+		if to.IsZero() {
+			to = time.Now()
+		}
+		histories, err := baselineStore.ListBaselineHistory(r.Context(), userID, from, to)
+		if err != nil {
+			http.Error(w, "list baseline history failed", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, histories)
+	}))
+
+	srv.Handle("/internal/v1/training/summaries", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if baselineStore == nil {
+			http.Error(w, "training summary subsystem unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		userID := r.URL.Query().Get("user_id")
+		if userID == "" {
+			http.Error(w, "user_id required", http.StatusBadRequest)
+			return
+		}
+		from, err := parseRangeTime(r.URL.Query().Get("from"), false)
+		if err != nil {
+			http.Error(w, "invalid from", http.StatusBadRequest)
+			return
+		}
+		to, err := parseRangeTime(r.URL.Query().Get("to"), true)
+		if err != nil {
+			http.Error(w, "invalid to", http.StatusBadRequest)
+			return
+		}
+		if from.IsZero() {
+			from = time.Unix(0, 0)
+		}
+		if to.IsZero() {
+			to = time.Now()
+		}
+		summaries, err := baselineStore.ListTrainingSummaries(r.Context(), userID, from, to)
+		if err != nil {
+			http.Error(w, "list training summaries failed", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, summaries)
+	}))
+
+	srv.Handle("/internal/v1/training/feedback", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if baselineStore == nil {
+			http.Error(w, "training feedback subsystem unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req trainingFeedbackRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if req.UserID == "" || req.LogID == "" || req.Content == "" {
+			http.Error(w, "user_id/log_id/content required", http.StatusBadRequest)
+			return
+		}
+		feedback := storage.TrainingFeedback{
+			FeedbackID: uuid.NewString(),
+			UserID:     req.UserID,
+			LogID:      req.LogID,
+			Content:    req.Content,
+		}
+		if err := baselineStore.CreateTrainingFeedback(r.Context(), feedback); err != nil {
+			http.Error(w, "create training feedback failed", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"feedback_id": feedback.FeedbackID})
 	}))
 
 	return srv
@@ -618,6 +765,44 @@ func parseRangeTime(input string, isEnd bool) (time.Time, error) {
 		return t, nil
 	}
 	return time.ParseInLocation("2006-01-02 15:04:05", input, time.Local)
+}
+
+func enqueueBaselineRecalc(ctx context.Context, asyncJobStore AsyncJobStore, asynqClient *asynq.Client, userID string, triggerType string, triggerRef string) (string, error) {
+	if asyncJobStore == nil {
+		return "", errBadRequest("async subsystem unavailable")
+	}
+	jobID := uuid.NewString()
+	payload := task.BaselineRecalcPayload{
+		JobID:       jobID,
+		UserID:      userID,
+		TriggerType: triggerType,
+		TriggerRef:  triggerRef,
+	}
+	b, err := task.EncodeBaselineRecalcPayload(payload)
+	if err != nil {
+		return "", errBadRequest("payload invalid")
+	}
+	job := storage.AsyncJob{
+		JobID:        jobID,
+		JobType:      task.TypeBaselineRecalc,
+		UserID:       userID,
+		PayloadJSON:  b,
+		Status:       "queued",
+		RetryCount:   0,
+		ErrorMessage: "",
+	}
+	if err := asyncJobStore.CreateAsyncJob(ctx, job); err != nil {
+		return "", errBadRequest("create async job failed")
+	}
+	if asynqClient == nil {
+		_ = asyncJobStore.UpdateAsyncJobStatus(ctx, jobID, "failed", 0, "enqueue client unavailable")
+		return "", errBadRequest("enqueue client unavailable")
+	}
+	if _, err := asynqClient.Enqueue(asynq.NewTask(task.TypeBaselineRecalc, b), asynq.Queue("default")); err != nil {
+		_ = asyncJobStore.UpdateAsyncJobStatus(ctx, jobID, "failed", 0, err.Error())
+		return "", errBadRequest("enqueue failed")
+	}
+	return jobID, nil
 }
 
 func enqueueTrainingRecalc(ctx context.Context, asyncJobStore AsyncJobStore, asynqClient *asynq.Client, userID string, logID string, op string) (string, error) {
