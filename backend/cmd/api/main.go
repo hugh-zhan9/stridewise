@@ -12,6 +12,7 @@ import (
 	"stridewise/backend/internal/config"
 	"stridewise/backend/internal/server"
 	"stridewise/backend/internal/storage"
+	"stridewise/backend/internal/weather"
 )
 
 type syncJobStoreAdapter struct {
@@ -68,6 +69,16 @@ func main() {
 	asynqClient := asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.Redis.Addr})
 	defer asynqClient.Close()
 
+	mockProvider := weather.NewMockProvider(weather.SnapshotInput{
+		TemperatureC:      20,
+		FeelsLikeC:        20,
+		Humidity:          0.5,
+		WindSpeedMS:       2,
+		PrecipitationProb: 0.1,
+		AQI:               50,
+		UVIndex:           3,
+	})
+
 	httpSrv := server.NewHTTPServer(
 		cfg.Server.HTTP.Addr,
 		cfg.Security.InternalToken,
@@ -75,6 +86,9 @@ func main() {
 		jobAdapter,
 		jobAdapter,
 		asynqClient,
+		store,
+		store,
+		mockProvider,
 	)
 	app := kratos.New(
 		kratos.Name("stridewise-api"),
