@@ -279,3 +279,17 @@
 - `backend/internal/server/http_user_weather_test.go`
 - `backend/internal/server/http_recommendation_test.go`
 ----------------------------------------
+## [2026-03-10 19:46] [Feature]
+- **Change**: 训练总结与反馈支持活动来源并支持软删除
+- **Risk Analysis**: 新增summary/feedback字段与活动总结流程，若迁移/查询逻辑不一致可能导致历史数据不可见或重复
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/migrations/007_training_summary_activity.sql`
+- `backend/internal/storage/postgres.go`
+- `backend/internal/storage/postgres_baseline_test.go`
+- `backend/internal/baseline/processor.go`
+- `backend/internal/baseline/processor_test.go`
+- `backend/internal/server/http.go`
+- `backend/internal/server/http_baseline_test.go`
+- `backend/internal/worker/handler_baseline_test.go`
+----------------------------------------
