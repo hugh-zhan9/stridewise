@@ -15,7 +15,8 @@ asynq:
   concurrency: 10
 
 keep:
-  data_file: "../running_page/src/static/activities.json"
+  phone_number: "change-me"
+  password: "change-me"
 
 strava:
   data_file: "../running_page/src/static/activities.json"
