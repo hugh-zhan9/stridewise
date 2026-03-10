@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +33,19 @@ func TestGetBaselineCurrent(t *testing.T) {
 	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, nil, nil, &baselineStoreStub{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/internal/v1/baseline/current?user_id=u1", nil)
+	req.Header.Set("X-Internal-Token", "token")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestCreateTrainingFeedbackWithSource(t *testing.T) {
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, nil, nil, &baselineStoreStub{}, nil)
+
+	body := `{"user_id":"u1","source_type":"activity","source_id":"1","content":"ok"}`
+	req := httptest.NewRequest(http.MethodPost, "/internal/v1/training/feedback", strings.NewReader(body))
 	req.Header.Set("X-Internal-Token", "token")
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, req)

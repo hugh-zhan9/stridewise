@@ -125,9 +125,10 @@ type trainingLogRequest struct {
 }
 
 type trainingFeedbackRequest struct {
-	UserID  string `json:"user_id"`
-	LogID   string `json:"log_id"`
-	Content string `json:"content"`
+	UserID     string `json:"user_id"`
+	SourceType string `json:"source_type"`
+	SourceID   string `json:"source_id"`
+	Content    string `json:"content"`
 }
 
 type recommendationGenerateRequest struct {
@@ -135,9 +136,9 @@ type recommendationGenerateRequest struct {
 }
 
 type recommendationFeedbackRequest struct {
-	UserID  string `json:"user_id"`
-	Useful  string `json:"useful"`
-	Reason  string `json:"reason"`
+	UserID string `json:"user_id"`
+	Useful string `json:"useful"`
+	Reason string `json:"reason"`
 }
 
 func NewHTTPServer(
@@ -777,14 +778,24 @@ func NewHTTPServer(
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
-		if req.UserID == "" || req.LogID == "" || req.Content == "" {
-			http.Error(w, "user_id/log_id/content required", http.StatusBadRequest)
+		if req.UserID == "" || req.SourceType == "" || req.SourceID == "" || req.Content == "" {
+			http.Error(w, "user_id/source_type/source_id/content required", http.StatusBadRequest)
 			return
+		}
+		if req.SourceType != "log" && req.SourceType != "activity" {
+			http.Error(w, "source_type invalid", http.StatusBadRequest)
+			return
+		}
+		logID := ""
+		if req.SourceType == "log" {
+			logID = req.SourceID
 		}
 		feedback := storage.TrainingFeedback{
 			FeedbackID: uuid.NewString(),
 			UserID:     req.UserID,
-			LogID:      req.LogID,
+			SourceType: req.SourceType,
+			SourceID:   req.SourceID,
+			LogID:      logID,
 			Content:    req.Content,
 		}
 		if err := baselineStore.CreateTrainingFeedback(r.Context(), feedback); err != nil {
