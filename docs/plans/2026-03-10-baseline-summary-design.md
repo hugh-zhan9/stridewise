@@ -1,13 +1,15 @@
 # StrideWise 基线评估与训练后总结设计文档
 
 ## 文档版本
-- 当前版本：v0.1.0
+- ~~当前版本：v0.1.0~~
+- 当前版本：v0.2.0
 - 发布日期：2026-03-10
 - 文档状态：可评审
 
 ## 变更记录
 | 版本号 | 日期 | 变更说明 |
 | --- | --- | --- |
+| v0.2.0 | 2026-03-10 | 新增训练总结 AI 生成方案、配置与失败降级策略。 |
 | v0.1.0 | 2026-03-10 | 初版：基线计算、任务触发、训练总结与反馈闭环设计。 |
 
 ## 1. 背景与目标
@@ -75,7 +77,8 @@
 处理流程：
 1. 汇总最近 28 天训练记录（手动 + 第三方）
 2. 计算基线指标，写入 `baseline_history` 与 `baseline_current`
-3. 生成/更新本次触发相关训练记录的 `training_summaries`
+3. ~~生成/更新本次触发相关训练记录的 `training_summaries`~~
+4. 通过 AI Provider 生成/更新本次触发相关训练记录的 `training_summaries`
 
 ## 4. 基线计算规则（真实计算）
 
@@ -111,7 +114,40 @@
 - 数据不足：`status=insufficient_data`，仍可返回已有指标
 - sRPE 缺失：ACWR_SRPE 可为空，仍返回 ACWR_DISTANCE
 - 任务失败：记录 `async_jobs` 的 error_message
-- 总结失败不影响基线入库
+- ~~总结失败不影响基线入库~~
+- AI 总结失败不影响基线入库，保留历史总结（若存在）并记录失败原因
+
+## 8. 训练总结 AI 方案（新增）
+
+### 8.1 Provider 抽象与默认实现
+- 引入 AI Provider 抽象接口 `Summarizer`，支持多模型扩展
+- 默认实现：OpenAI Provider（首期接入）
+- 可替换实现：本地模型 Provider（后续）
+
+### 8.2 全局模型配置
+- 模型选择采用全局配置，不支持按用户覆盖
+- 配置字段（示例）：
+  - `ai.provider`（`openai`）
+  - `ai.openai.api_key`
+  - `ai.openai.base_url`
+  - `ai.openai.model`
+  - `ai.openai.timeout_ms`
+  - `ai.openai.max_tokens`
+  - `ai.openai.temperature`
+
+### 8.3 输入输出约束
+- 输入最小化：仅发送训练记录摘要、基线关键指标、最近训练频率
+- 禁止传输原始轨迹、设备标识等敏感信息
+- 输出必须映射到 `training_summaries` 字段
+
+### 8.4 失败与降级
+- AI 超时/失败：记录 `async_jobs.error_message`
+- 若已有总结：保留历史总结不覆盖
+- 若无总结：写入规则占位文本（可追溯）
+
+### 8.5 与“无外部 API”原则的兼容
+- 对外不提供公开 API
+- 允许向外部 AI 供应商发起调用（OpenAI）作为内部依赖
 
 ## 7. 测试策略
 - Storage：基线计算/历史保存/总结覆盖/反馈写入
