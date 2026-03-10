@@ -95,3 +95,31 @@
 - **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
 - **Changed Files**:
 - `docs/AI_CHANGELOG.md`
+## [2026-03-10 11:25] [Feature]
+- **Change**: 新增 Keep 逆向登录 API 客户端
+- **Risk Analysis**: 风险在 Keep 接口返回结构变化导致解析失败
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- (未检测到变更文件或当前目录非 git 仓库)
+----------------------------------------
+## [2026-03-10 11:28] [Feature]
+- **Change**: 实现 Keep 逆向登录采集连接器
+- **Risk Analysis**: 风险在 Keep API 变更或封禁导致不可用
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `docs/AI_CHANGELOG.md`
+----------------------------------------
+## [2026-03-10 11:31] [Feature]
+- **Change**: 实现 Keep runmap 解码与 polyline 生成
+- **Risk Analysis**: 风险在解码逻辑偏差导致轨迹丢失
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `docs/AI_CHANGELOG.md`
+----------------------------------------
+## [2026-03-10 11:33] [Feature]
+- **Change**: 配置 Keep 逆向登录凭证并接入 worker
+- **Risk Analysis**: 风险在明文凭证泄露；需限制配置访问
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `docs/AI_CHANGELOG.md`
+----------------------------------------
