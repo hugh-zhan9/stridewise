@@ -59,6 +59,34 @@ type WeatherSnapshot struct {
 	CreatedAt         time.Time
 }
 
+type TrainingLog struct {
+	LogID              string
+	UserID             string
+	Source             string
+	TrainingType       string
+	TrainingTypeCustom string
+	StartTime          time.Time
+	DurationSec        int
+	DistanceKM         float64
+	PaceStr            string
+	PaceSecPerKM       int
+	RPE                int
+	Discomfort         bool
+	DeletedAt          *time.Time
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+type AsyncJob struct {
+	JobID        string
+	JobType      string
+	UserID       string
+	PayloadJSON  []byte
+	Status       string
+	RetryCount   int
+	ErrorMessage string
+}
+
 func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore {
 	return &PostgresStore{pool: pool}
 }
@@ -204,6 +232,78 @@ func (s *PostgresStore) RetrySyncJob(ctx context.Context, jobID string) (SyncJob
 		return SyncJob{}, err
 	}
 	return job, nil
+}
+
+func (s *PostgresStore) CreateTrainingLog(ctx context.Context, log TrainingLog) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO training_logs (
+			log_id, user_id, source, training_type, training_type_custom,
+			start_time, duration_sec, distance_km, pace_str, pace_sec_per_km,
+			rpe, discomfort, created_at, updated_at
+		)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW(),NOW())
+	`, log.LogID, log.UserID, log.Source, log.TrainingType, log.TrainingTypeCustom,
+		log.StartTime, log.DurationSec, log.DistanceKM, log.PaceStr, log.PaceSecPerKM,
+		log.RPE, log.Discomfort)
+	return err
+}
+
+func (s *PostgresStore) UpdateTrainingLog(ctx context.Context, log TrainingLog) error {
+	ct, err := s.pool.Exec(ctx, `
+		UPDATE training_logs
+		SET training_type=$2, training_type_custom=$3, start_time=$4, duration_sec=$5,
+		    distance_km=$6, pace_str=$7, pace_sec_per_km=$8, rpe=$9, discomfort=$10,
+		    updated_at=NOW()
+		WHERE log_id=$1 AND deleted_at IS NULL
+	`, log.LogID, log.TrainingType, log.TrainingTypeCustom, log.StartTime, log.DurationSec,
+		log.DistanceKM, log.PaceStr, log.PaceSecPerKM, log.RPE, log.Discomfort)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+func (s *PostgresStore) SoftDeleteTrainingLog(ctx context.Context, logID string) error {
+	ct, err := s.pool.Exec(ctx, `
+		UPDATE training_logs
+		SET deleted_at=NOW(), updated_at=NOW()
+		WHERE log_id=$1 AND deleted_at IS NULL
+	`, logID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
+func (s *PostgresStore) CreateAsyncJob(ctx context.Context, job AsyncJob) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO async_jobs (
+			job_id, job_type, user_id, payload_json, status, retry_count, error_message, created_at, updated_at
+		)
+		VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,NOW(),NOW())
+	`, job.JobID, job.JobType, job.UserID, string(job.PayloadJSON), job.Status, job.RetryCount, job.ErrorMessage)
+	return err
+}
+
+func (s *PostgresStore) UpdateAsyncJobStatus(ctx context.Context, jobID, status string, retryCount int, errMsg string) error {
+	ct, err := s.pool.Exec(ctx, `
+		UPDATE async_jobs
+		SET status=$2, retry_count=$3, error_message=$4, updated_at=NOW()
+		WHERE job_id=$1
+	`, jobID, status, retryCount, errMsg)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
 }
 
 func (s *PostgresStore) UpsertUserProfile(ctx context.Context, p UserProfile) error {
