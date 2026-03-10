@@ -47,3 +47,24 @@ func TestTrainingLogCRUD(t *testing.T) {
 		t.Fatalf("delete failed: %v", err)
 	}
 }
+
+func TestTrainingLogConflict(t *testing.T) {
+	dsn := os.Getenv("STRIDEWISE_TEST_DSN")
+	if dsn == "" {
+		t.Skip("STRIDEWISE_TEST_DSN not set")
+	}
+	pool, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		t.Fatalf("connect failed: %v", err)
+	}
+	defer pool.Close()
+
+	store := NewPostgresStore(pool)
+	start := time.Date(2026, 3, 10, 7, 0, 0, 0, time.UTC)
+	end := start.Add(30 * time.Minute)
+	conflict, err := store.HasTrainingConflict(context.Background(), "u1", start, end, "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	_ = conflict
+}

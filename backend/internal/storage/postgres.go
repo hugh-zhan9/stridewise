@@ -306,6 +306,30 @@ func (s *PostgresStore) UpdateAsyncJobStatus(ctx context.Context, jobID, status 
 	return nil
 }
 
+func (s *PostgresStore) HasTrainingConflict(ctx context.Context, userID string, start time.Time, end time.Time, excludeLogID string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM training_logs
+			WHERE user_id=$1
+			  AND deleted_at IS NULL
+			  AND ($4 = '' OR log_id <> $4)
+			  AND (start_time, start_time + (duration_sec || ' seconds')::interval) OVERLAPS ($2, $3)
+			UNION ALL
+			SELECT 1
+			FROM activities
+			WHERE user_id=$1
+			  AND (start_time_local, start_time_local + (moving_time_sec || ' seconds')::interval) OVERLAPS ($2, $3)
+			LIMIT 1
+		)
+	`, userID, start, end, excludeLogID).Scan(&exists)
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 func (s *PostgresStore) UpsertUserProfile(ctx context.Context, p UserProfile) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO user_profiles (
