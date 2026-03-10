@@ -1,43 +1,61 @@
 package keep
 
 import (
-	"os"
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	syncjob "stridewise/backend/internal/sync"
 )
 
-func TestConnector_FetchActivities_FallbackStartDate(t *testing.T) {
-	tmp, err := os.CreateTemp("", "activities-*.json")
-	if err != nil {
-		t.Fatalf("temp: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Remove(tmp.Name()) })
+func TestConnector_FetchActivities_Live(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1.1/users/login", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"token":"t1"}}`))
+	})
+	mux.HandleFunc("/pd/v3/stats/detail", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"records":[{"logs":[{"stats":{"id":"run_1","isDoubtful":false}}]}],"lastTimestamp":0}}`))
+	})
+	mux.HandleFunc("/pd/v3/runninglog/run_1", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"id":"abc_1","startTime":1700000000000,"endTime":1700000600000,"duration":600,"distance":1000,"dataType":"outdoorRunning","timezone":"Asia/Shanghai","geoPoints":null,"heartRate":null}}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
 
-	payload := `[
-      {"run_id": "a1", "name": "x", "distance": 1000, "moving_time": "0:10:00", "start_date": "2026-01-03 00:00:00+00:00", "start_date_local": "invalid"}
-    ]`
-	if _, err := tmp.WriteString(payload); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-
-	c := New(tmp.Name())
-	res, err := c.FetchActivities(nil, "u1", syncjob.Checkpoint{})
+	c := NewLive("13000000000", "pass", srv.URL, srv.Client())
+	res, err := c.FetchActivities(context.Background(), "u1", syncjob.Checkpoint{})
 	if err != nil {
-		t.Fatalf("fetch: %v", err)
+		t.Fatalf("fetch err: %v", err)
 	}
 	if len(res.Activities) != 1 {
 		t.Fatalf("expected 1 activity, got %d", len(res.Activities))
 	}
+	if res.Activities[0].SourceActivityID != "1" {
+		t.Fatalf("unexpected id: %s", res.Activities[0].SourceActivityID)
+	}
+	if res.Activities[0].MovingTimeSec != 600 {
+		t.Fatalf("unexpected moving time: %d", res.Activities[0].MovingTimeSec)
+	}
+	if res.LastSyncedAt.IsZero() {
+		t.Fatal("expected last synced at")
+	}
+	if res.Activities[0].StartTime.After(time.Now().Add(24 * time.Hour)) {
+		t.Fatal("unexpected start time")
+	}
 }
 
-func TestConnector_EmptyDataFile(t *testing.T) {
-	c := New("")
-	_, err := c.FetchActivities(nil, "u1", syncjob.Checkpoint{})
+func TestConnector_EmptyCredentials(t *testing.T) {
+	c := NewLive("", "", "http://example.com", nil)
+	_, err := c.FetchActivities(context.Background(), "u1", syncjob.Checkpoint{})
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if err.Error() != "keep data_file is empty" {
+	if err.Error() != "keep credential is empty" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

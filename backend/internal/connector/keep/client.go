@@ -112,3 +112,27 @@ func (c *KeepClient) FetchRunIDs(ctx context.Context, token, sportType string, l
 
 	return ids, body.Data.LastTimestamp, nil
 }
+
+func (c *KeepClient) FetchRunDetail(ctx context.Context, token, sportType, runID string) (keepRunDetail, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/pd/v3/"+sportType+"log/"+runID, nil)
+	if err != nil {
+		return keepRunDetail{}, err
+	}
+	req.Header.Set("User-Agent", keepUserAgent)
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return keepRunDetail{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return keepRunDetail{}, errors.New("keep fetch detail failed")
+	}
+
+	var body keepRunDetail
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return keepRunDetail{}, err
+	}
+	return body, nil
+}
