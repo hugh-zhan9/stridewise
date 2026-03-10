@@ -245,3 +245,12 @@
 - `backend/internal/ai/openai_recommender.go`
 - `backend/internal/ai/openai_recommender_test.go`
 ----------------------------------------
+## [2026-03-10 18:17] [Feature]
+- **Change**: 新增建议规则兜底逻辑
+- **Risk Analysis**: 新增规则覆盖与输出兜底逻辑，若规则优先级处理不当可能覆盖AI输出过度；风险中
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/recommendation/rules.go`
+- `backend/internal/recommendation/rules_test.go`
+- `backend/internal/recommendation/types.go`
+----------------------------------------
