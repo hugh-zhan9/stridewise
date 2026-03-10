@@ -6,13 +6,15 @@
 - ~~当前版本：v1.1.0~~
 - ~~当前版本：v1.2.0~~
 - ~~当前版本：v1.3.0~~
-- 当前版本：v1.4.0
-- 发布日期：2026-03-09
+- ~~当前版本：v1.4.0~~
+- 当前版本：v1.5.0
+- 发布日期：2026-03-10
 - 文档状态：可评审
 
 ## 变更记录
 | 版本号 | 日期 | 变更说明 |
 | --- | --- | --- |
+| v1.5.0 | 2026-03-10 | 新增内部建议生成/反馈接口与 Recommendation 扩展字段。 |
 | v1.4.0 | 2026-03-09 | 首发数据源调整为 Keep：provider 枚举新增 `keep` 并纳入统一来源范围。 |
 | v1.3.0 | 2026-03-09 | 文档命名统一为 StrideWise；数据源枚举统一为 Strava/Garmin/Nike/GPX/TCX/FIT；明确当前阶段全部 API 为内部接口并统一使用 `X-Internal-Token`。 |
 | v1.2.0 | 2026-03-09 | 对齐当前阶段安全策略：移除 JWT Bearer 默认鉴权，改为内部接口 `X-Internal-Token`；补充“完整用户鉴权后置”说明。 |
@@ -196,6 +198,7 @@ paths:
     get:
       tags: [recommendation]
       summary: 获取今日建议
+      deprecated: true
       operationId: getTodayRecommendation
       responses:
         '200':
@@ -211,6 +214,7 @@ paths:
     post:
       tags: [recommendation]
       summary: 手动触发建议生成（内部）
+      deprecated: true
       operationId: generateRecommendation
       security:
         - internalToken: []
@@ -229,6 +233,7 @@ paths:
     post:
       tags: [recommendation]
       summary: 标记建议已消费
+      deprecated: true
       operationId: consumeRecommendation
       parameters:
         - name: id
@@ -267,6 +272,7 @@ paths:
     post:
       tags: [recommendation]
       summary: 提交建议反馈
+      deprecated: true
       operationId: submitFeedback
       parameters:
         - name: id
@@ -293,6 +299,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problem'
+
+  /internal/v1/recommendations/generate:
+    post:
+      tags: [recommendation]
+      summary: 生成建议（内部）
+      operationId: generateRecommendationInternal
+      security:
+        - internalToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationGenerateRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recommendation'
+
+  /internal/v1/recommendations/latest:
+    get:
+      tags: [recommendation]
+      summary: 获取最新建议（内部）
+      operationId: getLatestRecommendationInternal
+      security:
+        - internalToken: []
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recommendation'
+
+  /internal/v1/recommendations/{id}/feedback:
+    post:
+      tags: [recommendation]
+      summary: 提交建议反馈（内部）
+      operationId: submitRecommendationFeedbackInternal
+      security:
+        - internalToken: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationFeedbackRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendationFeedback'
 
   /internal/health:
     get:
@@ -437,6 +510,18 @@ components:
       type: object
       properties:
         id: { type: string }
+        user_id: { type: string }
+        created_at: { type: string, format: date-time }
+        recommendation_date: { type: string, format: date }
+        input_json:
+          type: object
+          additionalProperties: true
+        output_json:
+          type: object
+          additionalProperties: true
+        override_json:
+          type: object
+          additionalProperties: true
         rec_date_local: { type: string, format: date }
         status: { type: string, enum: [draft, active, consumed, expired] }
         should_run: { type: boolean }
@@ -451,6 +536,8 @@ components:
           type: array
           items: { type: string }
         is_fallback: { type: boolean }
+        ai_provider: { type: string }
+        ai_model: { type: string }
         engine_version: { type: string }
         prompt_version: { type: string }
         model_name: { type: string }
@@ -479,6 +566,29 @@ components:
         id: { type: string }
         recommendation_id: { type: string }
         usefulness: { type: string }
+        reason: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    RecommendationGenerateRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id: { type: string }
+
+    RecommendationFeedbackRequest:
+      type: object
+      required: [useful]
+      properties:
+        useful: { type: string, enum: [yes, neutral, no] }
+        reason: { type: string, maxLength: 500 }
+
+    RecommendationFeedback:
+      type: object
+      properties:
+        feedback_id: { type: string }
+        rec_id: { type: string }
+        user_id: { type: string }
+        useful: { type: string }
         reason: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
 ```
