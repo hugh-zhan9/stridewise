@@ -123,3 +123,10 @@
 - **Changed Files**:
 - `docs/AI_CHANGELOG.md`
 ----------------------------------------
+## [2026-03-10 11:45] [Feature]
+- **Change**: Keep Raw 写入 geoPoints/heartRates 原文与解码结果
+- **Risk Analysis**: 风险在 Raw 体积增大与序列化性能下降
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- (未检测到变更文件或当前目录非 git 仓库)
+----------------------------------------
