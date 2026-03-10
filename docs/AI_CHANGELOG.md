@@ -72,3 +72,31 @@
 - `backend/internal/task/task_stagea_test.go`
 - `backend/migrations/002_sync_pipeline.sql`
 ----------------------------------------
+## [2026-03-10 10:41] [Feature]
+- **Change**: 完善 running_page JSON 解析：支持 start_date 回退与增量测试
+- **Risk Analysis**: 风险在时间解析格式覆盖不足导致漏数；需持续补充时间格式
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- (未检测到变更文件或当前目录非 git 仓库)
+----------------------------------------
+## [2026-03-10 10:45] [Refactor]
+- **Change**: Keep 连接器改为复用通用 JSON 解析器
+- **Risk Analysis**: 风险较低，主要关注 data_file 为空时的错误信息变化
+- **Risk Level**: S3（低级: 轻微行为偏差或日志/可观测性影响）
+- **Changed Files**:
+- `docs/AI_CHANGELOG.md`
+----------------------------------------
+## [2026-03-10 10:58] [Feature]
+- **Change**: 新增 Strava/Garmin/Nike/GPX/TCX/FIT 离线连接器并添加空路径校验
+- **Risk Analysis**: 风险在配置未设置 data_file 时会直接失败；需确保配置文件一致
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `docs/AI_CHANGELOG.md`
+----------------------------------------
+## [2026-03-10 11:00] [Feature]
+- **Change**: 扩展配置结构并在 worker 接入多来源离线连接器
+- **Risk Analysis**: 风险在配置缺失导致启动失败，需要保证 config.yaml 与环境配置同步
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `docs/AI_CHANGELOG.md`
+----------------------------------------
