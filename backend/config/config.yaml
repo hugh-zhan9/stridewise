@@ -16,3 +16,21 @@ asynq:
 
 keep:
   data_file: "../running_page/src/static/activities.json"
+
+strava:
+  data_file: "../running_page/src/static/activities.json"
+
+garmin:
+  data_file: "../running_page/src/static/activities.json"
+
+nike:
+  data_file: "../running_page/src/static/activities.json"
+
+gpx:
+  data_file: "../running_page/src/static/activities.json"
+
+tcx:
+  data_file: "../running_page/src/static/activities.json"
+
+fit:
+  data_file: "../running_page/src/static/activities.json"

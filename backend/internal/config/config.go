@@ -27,6 +27,24 @@ type Config struct {
 	Keep struct {
 		DataFile string `yaml:"data_file"`
 	} `yaml:"keep"`
+	Strava struct {
+		DataFile string `yaml:"data_file"`
+	} `yaml:"strava"`
+	Garmin struct {
+		DataFile string `yaml:"data_file"`
+	} `yaml:"garmin"`
+	Nike struct {
+		DataFile string `yaml:"data_file"`
+	} `yaml:"nike"`
+	GPX struct {
+		DataFile string `yaml:"data_file"`
+	} `yaml:"gpx"`
+	TCX struct {
+		DataFile string `yaml:"data_file"`
+	} `yaml:"tcx"`
+	FIT struct {
+		DataFile string `yaml:"data_file"`
+	} `yaml:"fit"`
 }
 
 func Load(path string) (*Config, error) {

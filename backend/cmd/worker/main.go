@@ -9,7 +9,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"stridewise/backend/internal/config"
+	fitconnector "stridewise/backend/internal/connector/fit"
+	garminconnector "stridewise/backend/internal/connector/garmin"
+	gpxconnector "stridewise/backend/internal/connector/gpx"
 	keepconnector "stridewise/backend/internal/connector/keep"
+	nikeconnector "stridewise/backend/internal/connector/nike"
+	stravaconnector "stridewise/backend/internal/connector/strava"
+	tcxconnector "stridewise/backend/internal/connector/tcx"
 	"stridewise/backend/internal/storage"
 	syncjob "stridewise/backend/internal/sync"
 	"stridewise/backend/internal/task"
@@ -33,7 +39,13 @@ func main() {
 
 	store := storage.NewPostgresStore(pool)
 	processor := syncjob.NewProcessor(store, map[string]syncjob.Connector{
-		"keep": keepconnector.New(cfg.Keep.DataFile),
+		"keep":   keepconnector.New(cfg.Keep.DataFile),
+		"strava": stravaconnector.New(cfg.Strava.DataFile),
+		"garmin": garminconnector.New(cfg.Garmin.DataFile),
+		"nike":   nikeconnector.New(cfg.Nike.DataFile),
+		"gpx":    gpxconnector.New(cfg.GPX.DataFile),
+		"tcx":    tcxconnector.New(cfg.TCX.DataFile),
+		"fit":    fitconnector.New(cfg.FIT.DataFile),
 	})
 	worker.SetProcessor(processor)
 
