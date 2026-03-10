@@ -24,6 +24,9 @@ type Config struct {
 	Asynq struct {
 		Concurrency int `yaml:"concurrency"`
 	} `yaml:"asynq"`
+	Keep struct {
+		DataFile string `yaml:"data_file"`
+	} `yaml:"keep"`
 }
 
 func Load(path string) (*Config, error) {

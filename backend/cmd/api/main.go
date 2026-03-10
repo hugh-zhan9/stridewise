@@ -1,14 +1,52 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 
 	"github.com/go-kratos/kratos/v2"
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"stridewise/backend/internal/config"
 	"stridewise/backend/internal/server"
+	"stridewise/backend/internal/storage"
 )
+
+type syncJobStoreAdapter struct {
+	store *storage.PostgresStore
+}
+
+func (a syncJobStoreAdapter) GetSyncJob(ctx context.Context, jobID string) (server.SyncJob, error) {
+	job, err := a.store.GetSyncJob(ctx, jobID)
+	if err != nil {
+		return server.SyncJob{}, err
+	}
+	return server.SyncJob{
+		JobID:        job.JobID,
+		UserID:       job.UserID,
+		Source:       job.Source,
+		Status:       job.Status,
+		RetryCount:   job.RetryCount,
+		ErrorMessage: job.ErrorMessage,
+	}, nil
+}
+
+func (a syncJobStoreAdapter) RetrySyncJob(ctx context.Context, jobID string) (server.SyncJob, error) {
+	job, err := a.store.RetrySyncJob(ctx, jobID)
+	if err != nil {
+		return server.SyncJob{}, err
+	}
+	return server.SyncJob{
+		JobID:        job.JobID,
+		UserID:       job.UserID,
+		Source:       job.Source,
+		Status:       job.Status,
+		RetryCount:   job.RetryCount,
+		ErrorMessage: job.ErrorMessage,
+	}, nil
+}
 
 func main() {
 	confPath := flag.String("conf", "config/config.yaml", "config path")
@@ -19,7 +57,25 @@ func main() {
 		log.Fatalf("load config failed: %v", err)
 	}
 
-	httpSrv := server.NewHTTPServer(cfg.Server.HTTP.Addr, cfg.Security.InternalToken)
+	pool, err := pgxpool.New(context.Background(), cfg.Postgres.DSN)
+	if err != nil {
+		log.Fatalf("connect postgres failed: %v", err)
+	}
+	defer pool.Close()
+
+	store := storage.NewPostgresStore(pool)
+	jobAdapter := syncJobStoreAdapter{store: store}
+	asynqClient := asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.Redis.Addr})
+	defer asynqClient.Close()
+
+	httpSrv := server.NewHTTPServer(
+		cfg.Server.HTTP.Addr,
+		cfg.Security.InternalToken,
+		store,
+		jobAdapter,
+		jobAdapter,
+		asynqClient,
+	)
 	app := kratos.New(
 		kratos.Name("stridewise-api"),
 		kratos.Server(httpSrv),

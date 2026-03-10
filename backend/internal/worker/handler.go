@@ -2,18 +2,29 @@ package worker
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/hibiken/asynq"
 
+	"stridewise/backend/internal/sync"
 	"stridewise/backend/internal/task"
 )
 
-func HandleSyncJob(_ context.Context, t *asynq.Task) error {
+var processor *sync.Processor
+
+func SetProcessor(p *sync.Processor) {
+	processor = p
+}
+
+func HandleSyncJob(ctx context.Context, t *asynq.Task) error {
+	if processor == nil {
+		return errors.New("sync processor is not configured")
+	}
+
 	p, err := task.DecodeSyncJobPayload(t.Payload())
 	if err != nil {
 		return err
 	}
-	fmt.Printf("processing sync job: user=%s source=%s\n", p.UserID, p.Source)
-	return nil
+
+	return processor.ProcessSyncJob(ctx, p.JobID, p.UserID, p.Source, p.RetryCount)
 }

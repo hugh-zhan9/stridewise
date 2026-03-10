@@ -28,3 +28,47 @@
 - **Changed Files**:
 - `docker-compose.yml`
 ----------------------------------------
+## [2026-03-09 20:05] [Feature]
+- **Change**: 实现running_page风格的同步数据获取最小闭环：新增Keep连接器、同步处理器、PostgreSQL存储、内部创建同步任务接口，并打通Asynq worker处理流程
+- **Risk Analysis**: 主要风险在于Keep连接器当前以本地JSON文件模拟数据源，真实Keep接口鉴权与分页策略尚未接入；数据库迁移新增多表后需在部署阶段确保顺序执行与索引检查。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/cmd/api/main.go`
+- `backend/cmd/worker/main.go`
+- `backend/config/config.yaml`
+- `backend/go.mod`
+- `backend/go.sum`
+- `backend/internal/config/config.go`
+- `backend/internal/server/http.go`
+- `backend/internal/task/task.go`
+- `backend/internal/task/task_test.go`
+- `backend/internal/worker/handler.go`
+- `backend/migrations/001_init.sql`
+- `backend/internal/sync/processor.go`
+- `backend/internal/sync/processor_test.go`
+- `backend/internal/storage/postgres.go`
+- `backend/internal/connector/keep/connector.go`
+----------------------------------------
+## [2026-03-10 09:58] [Feature]
+- **Change**: 阶段A补齐checkpoint与sync错误存储、任务查询/重试API、同步payload携带retry_count；阶段B新增通用running_page JSON解析器
+- **Risk Analysis**: 风险主要在接口签名调整与数据库字段扩展；若未同步更新其他调用方可能出现运行时错误，需关注worker与connector的适配完整性
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/cmd/api/main.go`
+- `backend/cmd/worker/main.go`
+- `backend/config/config.yaml`
+- `backend/go.mod`
+- `backend/go.sum`
+- `backend/internal/config/config.go`
+- `backend/internal/server/http.go`
+- `backend/internal/task/task.go`
+- `backend/internal/task/task_test.go`
+- `backend/internal/worker/handler.go`
+- `backend/migrations/001_init.sql`
+- `docs/AI_CHANGELOG.md`
+- `backend/internal/connector/`
+- `backend/internal/storage/`
+- `backend/internal/sync/`
+- `backend/internal/task/task_stagea_test.go`
+- `backend/migrations/002_sync_pipeline.sql`
+----------------------------------------
