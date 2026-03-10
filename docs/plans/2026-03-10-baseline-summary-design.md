@@ -2,13 +2,15 @@
 
 ## 文档版本
 - ~~当前版本：v0.1.0~~
-- 当前版本：v0.2.0
+- ~~当前版本：v0.2.0~~
+- 当前版本：v0.3.0
 - 发布日期：2026-03-10
 - 文档状态：可评审
 
 ## 变更记录
 | 版本号 | 日期 | 变更说明 |
 | --- | --- | --- |
+| v0.3.0 | 2026-03-10 | 训练总结/反馈支持第三方活动，新增 source_type/source_id 与反馈软删除。 |
 | v0.2.0 | 2026-03-10 | 新增训练总结 AI 生成方案、配置与失败降级策略。 |
 | v0.1.0 | 2026-03-10 | 初版：基线计算、任务触发、训练总结与反馈闭环设计。 |
 
@@ -47,7 +49,10 @@
 表：`training_summaries`
 - `summary_id`
 - `user_id`
-- `log_id`
+- ~~`log_id`~~
+- `source_type`（`log|activity`）
+- `source_id`
+- `log_id`（可空，兼容历史数据）
 - `completion_rate`
 - `intensity_match`
 - `recovery_advice`
@@ -56,14 +61,19 @@
 - `next_suggestion`
 - `deleted_at`
 - `created_at` / `updated_at`
+- 唯一性：`UNIQUE(user_id, source_type, source_id)`
 
 ### 2.4 TrainingFeedbacks
 表：`training_feedbacks`
 - `feedback_id`
 - `user_id`
-- `log_id`
+- ~~`log_id`~~
+- `source_type`（`log|activity`）
+- `source_id`
+- `log_id`（可空，兼容历史数据）
 - `content`（自由文本）
 - `created_at`
+- `deleted_at`
 
 ## 3. 触发机制与数据流
 
@@ -79,6 +89,8 @@
 2. 计算基线指标，写入 `baseline_history` 与 `baseline_current`
 3. ~~生成/更新本次触发相关训练记录的 `training_summaries`~~
 4. 通过 AI Provider 生成/更新本次触发相关训练记录的 `training_summaries`
+5. 同步触发时，为本次同步的活动生成/补齐 `source_type=activity` 总结
+6. 删除训练记录时，软删除对应总结与反馈
 
 ## 4. 基线计算规则（真实计算）
 
@@ -108,7 +120,9 @@
 - `GET /internal/v1/baseline/current?user_id=...`
 - `GET /internal/v1/baseline/history?user_id=...&from=...&to=...`
 - `GET /internal/v1/training/summaries?user_id=...&from=...&to=...`
-- `POST /internal/v1/training/feedback`（`user_id` + `log_id` + `content`）
+- 训练总结返回包含 `log` 与 `activity`，按训练开始时间倒序
+- ~~`POST /internal/v1/training/feedback`（`user_id` + `log_id` + `content`）~~
+- `POST /internal/v1/training/feedback`（`user_id` + `source_type` + `source_id` + `content`）
 
 ## 6. 异常与一致性
 - 数据不足：`status=insufficient_data`，仍可返回已有指标
@@ -116,6 +130,7 @@
 - 任务失败：记录 `async_jobs` 的 error_message
 - ~~总结失败不影响基线入库~~
 - AI 总结失败不影响基线入库，保留历史总结（若存在）并记录失败原因
+- 软删除：训练记录删除时同步软删 `training_summaries` 与 `training_feedbacks`
 
 ## 8. 训练总结 AI 方案（新增）
 
