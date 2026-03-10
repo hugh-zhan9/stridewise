@@ -16,6 +16,7 @@ type RunningPageActivity struct {
 	Name            string  `json:"name"`
 	Distance        float64 `json:"distance"`
 	MovingTime      string  `json:"moving_time"`
+	StartDate       string  `json:"start_date"`
 	StartDateLocal  string  `json:"start_date_local"`
 	SummaryPolyline string  `json:"summary_polyline"`
 }
@@ -39,7 +40,10 @@ func ParseRunningPageJSON(dataFile string, checkpoint syncjob.Checkpoint) (syncj
 	for _, item := range list {
 		start, err := parseStartDate(item.StartDateLocal)
 		if err != nil {
-			continue
+			start, err = parseStartDate(item.StartDate)
+			if err != nil {
+				continue
+			}
 		}
 		if !checkpoint.LastSyncedAt.IsZero() && !start.After(checkpoint.LastSyncedAt) {
 			continue
@@ -60,6 +64,7 @@ func ParseRunningPageJSON(dataFile string, checkpoint syncjob.Checkpoint) (syncj
 				"name":             item.Name,
 				"distance":         item.Distance,
 				"moving_time":      item.MovingTime,
+				"start_date":       item.StartDate,
 				"start_date_local": item.StartDateLocal,
 			},
 		})
@@ -75,7 +80,7 @@ func ParseRunningPageJSON(dataFile string, checkpoint syncjob.Checkpoint) (syncj
 }
 
 func parseStartDate(s string) (time.Time, error) {
-	layouts := []string{"2006-01-02 15:04:05", time.RFC3339}
+	layouts := []string{"2006-01-02 15:04:05", "2006-01-02 15:04:05-07:00", time.RFC3339}
 	for _, layout := range layouts {
 		if t, err := time.Parse(layout, s); err == nil {
 			return t, nil
