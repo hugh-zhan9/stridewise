@@ -61,6 +61,15 @@ func (f *fakeStore) AppendSyncError(_ context.Context, _, _, _ string, _ bool) e
 	return nil
 }
 
+type fakeEnqueuer struct {
+	called bool
+}
+
+func (f *fakeEnqueuer) EnqueueBaselineRecalc(_ context.Context, _ string, _ string, _ string) error {
+	f.called = true
+	return nil
+}
+
 func TestProcessor_ProcessSyncJob_KeepSource(t *testing.T) {
 	store := &fakeStore{}
 	p := NewProcessor(store, map[string]Connector{
@@ -86,5 +95,22 @@ func TestProcessor_ProcessSyncJob_KeepSource(t *testing.T) {
 	}
 	if store.saved[0].Source != "keep" || store.saved[0].UserID != "u1" {
 		t.Fatalf("unexpected canonical activity: %+v", store.saved[0])
+	}
+}
+
+func TestProcessor_ProcessSyncJob_EnqueueBaseline(t *testing.T) {
+	store := &fakeStore{}
+	enqueuer := &fakeEnqueuer{}
+	p := NewProcessor(store, map[string]Connector{
+		"keep": fakeConnector{},
+	})
+	p.SetBaselineEnqueuer(enqueuer)
+
+	err := p.ProcessSyncJob(context.Background(), "job-1", "u1", "keep", 0)
+	if err != nil {
+		t.Fatalf("process failed: %v", err)
+	}
+	if !enqueuer.called {
+		t.Fatal("expected baseline enqueuer called")
 	}
 }

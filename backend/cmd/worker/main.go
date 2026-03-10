@@ -8,6 +8,9 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"stridewise/backend/internal/ai"
+	"stridewise/backend/internal/asyncjob"
+	"stridewise/backend/internal/baseline"
 	"stridewise/backend/internal/config"
 	fitconnector "stridewise/backend/internal/connector/fit"
 	garminconnector "stridewise/backend/internal/connector/garmin"
@@ -39,6 +42,8 @@ func main() {
 	defer pool.Close()
 
 	store := storage.NewPostgresStore(pool)
+	asynqClient := asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.Redis.Addr})
+	defer asynqClient.Close()
 	processor := syncjob.NewProcessor(store, map[string]syncjob.Connector{
 		"keep":   keepconnector.NewLive(cfg.Keep.PhoneNumber, cfg.Keep.Password, "", nil),
 		"strava": stravaconnector.New(cfg.Strava.DataFile),
@@ -48,8 +53,24 @@ func main() {
 		"tcx":    tcxconnector.New(cfg.TCX.DataFile),
 		"fit":    fitconnector.New(cfg.FIT.DataFile),
 	})
+	processor.SetBaselineEnqueuer(asyncjob.NewBaselineEnqueuer(store, asynqClient))
 	worker.SetSyncProcessor(processor)
 	worker.SetTrainingProcessor(training.NewProcessor(store))
+
+	var summarizer ai.Summarizer
+	if cfg.AI.Provider == "openai" {
+		summarizer = ai.NewOpenAISummarizer(ai.OpenAIConfig{
+			APIKey:      cfg.AI.OpenAI.APIKey,
+			BaseURL:     cfg.AI.OpenAI.BaseURL,
+			Model:       cfg.AI.OpenAI.Model,
+			TimeoutMs:   cfg.AI.OpenAI.TimeoutMs,
+			MaxTokens:   cfg.AI.OpenAI.MaxTokens,
+			Temperature: cfg.AI.OpenAI.Temperature,
+		})
+	}
+	baselineProcessor := baseline.NewProcessor(store)
+	baselineProcessor.SetSummarizer(summarizer)
+	worker.SetBaselineProcessor(baselineProcessor)
 
 	server := asynq.NewServer(
 		asynq.RedisClientOpt{Addr: cfg.Redis.Addr},
@@ -59,6 +80,7 @@ func main() {
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(task.TypeSyncJob, worker.HandleSyncJob)
 	mux.HandleFunc(task.TypeTrainingRecalc, worker.HandleTrainingRecalc)
+	mux.HandleFunc(task.TypeBaselineRecalc, worker.HandleBaselineRecalc)
 
 	if err := server.Run(mux); err != nil {
 		log.Fatalf("worker run failed: %v", err)
