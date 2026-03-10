@@ -18,11 +18,16 @@ var allowedSources = map[string]struct{}{
 }
 
 type SyncJobPayload struct {
-	UserID string `json:"user_id"`
-	Source string `json:"source"`
+	JobID      string `json:"job_id"`
+	UserID     string `json:"user_id"`
+	Source     string `json:"source"`
+	RetryCount int    `json:"retry_count"`
 }
 
 func EncodeSyncJobPayload(p SyncJobPayload) ([]byte, error) {
+	if p.JobID == "" {
+		return nil, errors.New("job_id is required")
+	}
 	if p.UserID == "" {
 		return nil, errors.New("user_id is required")
 	}
@@ -37,11 +42,17 @@ func DecodeSyncJobPayload(b []byte) (SyncJobPayload, error) {
 	if err := json.Unmarshal(b, &p); err != nil {
 		return SyncJobPayload{}, err
 	}
+	if p.JobID == "" {
+		return SyncJobPayload{}, errors.New("job_id is required")
+	}
 	if p.UserID == "" {
 		return SyncJobPayload{}, errors.New("user_id is required")
 	}
 	if _, ok := allowedSources[p.Source]; !ok {
 		return SyncJobPayload{}, errors.New("unsupported source")
+	}
+	if p.RetryCount < 0 {
+		return SyncJobPayload{}, errors.New("retry_count cannot be negative")
 	}
 	return p, nil
 }

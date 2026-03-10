@@ -13,3 +13,6 @@ redis:
 
 asynq:
   concurrency: 10
+
+keep:
+  data_file: "../running_page/src/static/activities.json"
