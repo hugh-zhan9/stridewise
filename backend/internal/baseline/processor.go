@@ -18,11 +18,15 @@ type Store interface {
 	UpdateAsyncJobStatus(ctx context.Context, jobID, status string, retryCount int, errMsg string) error
 	ListTrainingLogs(ctx context.Context, userID string, from time.Time, to time.Time) ([]storage.TrainingLog, error)
 	ListActivities(ctx context.Context, userID string, from time.Time, to time.Time) ([]storage.Activity, error)
+	ListActivitiesBySyncJob(ctx context.Context, jobID string) ([]storage.Activity, error)
 	UpsertBaselineCurrent(ctx context.Context, b storage.BaselineCurrent) error
 	CreateBaselineHistory(ctx context.Context, b storage.BaselineHistory) error
 	GetTrainingLog(ctx context.Context, logID string) (storage.TrainingLog, error)
 	UpsertTrainingSummary(ctx context.Context, summary storage.TrainingSummary) error
 	GetTrainingSummary(ctx context.Context, logID string) (storage.TrainingSummary, error)
+	GetTrainingSummaryBySource(ctx context.Context, sourceType, sourceID string) (storage.TrainingSummary, error)
+	SoftDeleteTrainingSummaryBySource(ctx context.Context, sourceType, sourceID string) error
+	SoftDeleteTrainingFeedbackBySource(ctx context.Context, sourceType, sourceID string) error
 }
 
 type Processor struct {
@@ -147,29 +151,37 @@ func (p *Processor) recalc(ctx context.Context, userID, triggerType, triggerRef 
 	}
 
 	history := storage.BaselineHistory{
-		BaselineID:           uuid.NewString(),
-		UserID:               userID,
-		ComputedAt:           computedAt,
-		TriggerType:          triggerType,
-		TriggerRef:           triggerRef,
-		DataSessions7d:       metrics.DataSessions7d,
-		AcuteLoadSRPE:        metrics.AcuteSRPE,
-		ChronicLoadSRPE:      metrics.ChronicSRPE,
-		ACWRSRPE:             metrics.ACWRSRPE,
-		AcuteLoadDistance:    metrics.AcuteDistance,
-		ChronicLoadDistance:  metrics.ChronicDistance,
-		ACWRDistance:         metrics.ACWRDistance,
-		Monotony:             metrics.Monotony,
-		Strain:               metrics.Strain,
-		PaceAvgSecPerKM:      metrics.PaceAvgSecPerKM,
-		PaceLowSecPerKM:      metrics.PaceLowSecPerKM,
-		PaceHighSecPerKM:     metrics.PaceHighSecPerKM,
-		Status:               metrics.Status,
+		BaselineID:          uuid.NewString(),
+		UserID:              userID,
+		ComputedAt:          computedAt,
+		TriggerType:         triggerType,
+		TriggerRef:          triggerRef,
+		DataSessions7d:      metrics.DataSessions7d,
+		AcuteLoadSRPE:       metrics.AcuteSRPE,
+		ChronicLoadSRPE:     metrics.ChronicSRPE,
+		ACWRSRPE:            metrics.ACWRSRPE,
+		AcuteLoadDistance:   metrics.AcuteDistance,
+		ChronicLoadDistance: metrics.ChronicDistance,
+		ACWRDistance:        metrics.ACWRDistance,
+		Monotony:            metrics.Monotony,
+		Strain:              metrics.Strain,
+		PaceAvgSecPerKM:     metrics.PaceAvgSecPerKM,
+		PaceLowSecPerKM:     metrics.PaceLowSecPerKM,
+		PaceHighSecPerKM:    metrics.PaceHighSecPerKM,
+		Status:              metrics.Status,
 	}
 	if err := p.store.CreateBaselineHistory(ctx, history); err != nil {
 		return nil, err
 	}
 	summaryErr := p.updateTrainingSummary(ctx, userID, triggerType, triggerRef, metrics)
+	if triggerType == "sync" {
+		actErr := p.updateActivitySummaries(ctx, userID, triggerRef, metrics)
+		if summaryErr == nil {
+			summaryErr = actErr
+		} else if actErr != nil {
+			summaryErr = fmt.Errorf("%v; %w", summaryErr, actErr)
+		}
+	}
 	return summaryErr, nil
 }
 
@@ -185,6 +197,12 @@ func (p *Processor) updateTrainingSummary(ctx context.Context, userID, triggerTy
 		return nil
 	}
 	if triggerType == "training_delete" {
+		if err := p.store.SoftDeleteTrainingSummaryBySource(ctx, "log", triggerRef); err != nil {
+			return err
+		}
+		if err := p.store.SoftDeleteTrainingFeedbackBySource(ctx, "log", triggerRef); err != nil {
+			return err
+		}
 		return nil
 	}
 	log, err := p.store.GetTrainingLog(ctx, triggerRef)
@@ -194,12 +212,14 @@ func (p *Processor) updateTrainingSummary(ctx context.Context, userID, triggerTy
 	output, err := p.generateSummary(ctx, log, metrics)
 	if err != nil {
 		if errors.Is(err, errAISummaryFailed) {
-			if _, getErr := p.store.GetTrainingSummary(ctx, triggerRef); getErr != nil {
+			if _, getErr := p.store.GetTrainingSummaryBySource(ctx, "log", triggerRef); getErr != nil {
 				if errors.Is(getErr, pgx.ErrNoRows) {
 					fallback := fallbackSummary()
 					return p.store.UpsertTrainingSummary(ctx, storage.TrainingSummary{
 						SummaryID:        uuid.NewString(),
 						UserID:           userID,
+						SourceType:       "log",
+						SourceID:         log.LogID,
 						LogID:            log.LogID,
 						CompletionRate:   fallback.CompletionRate,
 						IntensityMatch:   fallback.IntensityMatch,
@@ -218,6 +238,8 @@ func (p *Processor) updateTrainingSummary(ctx context.Context, userID, triggerTy
 	summary := storage.TrainingSummary{
 		SummaryID:        uuid.NewString(),
 		UserID:           userID,
+		SourceType:       "log",
+		SourceID:         log.LogID,
 		LogID:            log.LogID,
 		CompletionRate:   output.CompletionRate,
 		IntensityMatch:   output.IntensityMatch,
@@ -227,6 +249,59 @@ func (p *Processor) updateTrainingSummary(ctx context.Context, userID, triggerTy
 		NextSuggestion:   output.NextSuggestion,
 	}
 	return p.store.UpsertTrainingSummary(ctx, summary)
+}
+
+func (p *Processor) updateActivitySummaries(ctx context.Context, userID, jobID string, metrics Metrics) error {
+	activities, err := p.store.ListActivitiesBySyncJob(ctx, jobID)
+	if err != nil {
+		return err
+	}
+	for _, act := range activities {
+		sourceID := fmt.Sprintf("%d", act.ID)
+		if _, getErr := p.store.GetTrainingSummaryBySource(ctx, "activity", sourceID); getErr == nil {
+			continue
+		} else if !errors.Is(getErr, pgx.ErrNoRows) {
+			return getErr
+		}
+
+		output, err := p.generateSummaryForActivity(ctx, userID, act, metrics)
+		if err != nil {
+			if errors.Is(err, errAISummaryFailed) {
+				fallback := fallbackSummary()
+				if err := p.store.UpsertTrainingSummary(ctx, storage.TrainingSummary{
+					SummaryID:        uuid.NewString(),
+					UserID:           userID,
+					SourceType:       "activity",
+					SourceID:         sourceID,
+					CompletionRate:   fallback.CompletionRate,
+					IntensityMatch:   fallback.IntensityMatch,
+					RecoveryAdvice:   fallback.RecoveryAdvice,
+					AnomalyNotes:     fallback.AnomalyNotes,
+					PerformanceNotes: fallback.PerformanceNotes,
+					NextSuggestion:   fallback.NextSuggestion,
+				}); err != nil {
+					return err
+				}
+				continue
+			}
+			return err
+		}
+		if err := p.store.UpsertTrainingSummary(ctx, storage.TrainingSummary{
+			SummaryID:        uuid.NewString(),
+			UserID:           userID,
+			SourceType:       "activity",
+			SourceID:         sourceID,
+			CompletionRate:   output.CompletionRate,
+			IntensityMatch:   output.IntensityMatch,
+			RecoveryAdvice:   output.RecoveryAdvice,
+			AnomalyNotes:     output.AnomalyNotes,
+			PerformanceNotes: output.PerformanceNotes,
+			NextSuggestion:   output.NextSuggestion,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 var errAISummaryFailed = errors.New("ai summary failed")
@@ -244,21 +319,61 @@ func (p *Processor) generateSummary(ctx context.Context, log storage.TrainingLog
 		RPE:                log.RPE,
 		Discomfort:         log.Discomfort,
 		Baseline: ai.BaselineSnapshot{
-			DataSessions7d:     metrics.DataSessions7d,
-			AcuteLoadSRPE:      metrics.AcuteSRPE,
-			ChronicLoadSRPE:    metrics.ChronicSRPE,
-			ACWRSRPE:           metrics.ACWRSRPE,
-			AcuteLoadDistance:  metrics.AcuteDistance,
+			DataSessions7d:      metrics.DataSessions7d,
+			AcuteLoadSRPE:       metrics.AcuteSRPE,
+			ChronicLoadSRPE:     metrics.ChronicSRPE,
+			ACWRSRPE:            metrics.ACWRSRPE,
+			AcuteLoadDistance:   metrics.AcuteDistance,
 			ChronicLoadDistance: metrics.ChronicDistance,
-			ACWRDistance:       metrics.ACWRDistance,
-			Monotony:           metrics.Monotony,
-			Strain:             metrics.Strain,
-			PaceAvgSecPerKM:    metrics.PaceAvgSecPerKM,
-			PaceLowSecPerKM:    metrics.PaceLowSecPerKM,
-			PaceHighSecPerKM:   metrics.PaceHighSecPerKM,
-			Status:             metrics.Status,
+			ACWRDistance:        metrics.ACWRDistance,
+			Monotony:            metrics.Monotony,
+			Strain:              metrics.Strain,
+			PaceAvgSecPerKM:     metrics.PaceAvgSecPerKM,
+			PaceLowSecPerKM:     metrics.PaceLowSecPerKM,
+			PaceHighSecPerKM:    metrics.PaceHighSecPerKM,
+			Status:              metrics.Status,
 		},
 	}
+	return p.generateSummaryInput(ctx, input)
+}
+
+func (p *Processor) generateSummaryForActivity(ctx context.Context, userID string, activity storage.Activity, metrics Metrics) (ai.SummaryOutput, error) {
+	distanceKM := activity.DistanceM / 1000.0
+	pace := 0
+	if distanceKM > 0 && activity.MovingTimeSec > 0 {
+		pace = int(math.Round(float64(activity.MovingTimeSec) / distanceKM))
+	}
+	input := ai.SummaryInput{
+		UserID:             userID,
+		LogID:              "",
+		TrainingType:       "unknown",
+		TrainingTypeCustom: activity.Name,
+		StartTime:          activity.StartTimeLocal,
+		DurationSec:        activity.MovingTimeSec,
+		DistanceKM:         distanceKM,
+		PaceSecPerKM:       pace,
+		RPE:                0,
+		Discomfort:         false,
+		Baseline: ai.BaselineSnapshot{
+			DataSessions7d:      metrics.DataSessions7d,
+			AcuteLoadSRPE:       metrics.AcuteSRPE,
+			ChronicLoadSRPE:     metrics.ChronicSRPE,
+			ACWRSRPE:            metrics.ACWRSRPE,
+			AcuteLoadDistance:   metrics.AcuteDistance,
+			ChronicLoadDistance: metrics.ChronicDistance,
+			ACWRDistance:        metrics.ACWRDistance,
+			Monotony:            metrics.Monotony,
+			Strain:              metrics.Strain,
+			PaceAvgSecPerKM:     metrics.PaceAvgSecPerKM,
+			PaceLowSecPerKM:     metrics.PaceLowSecPerKM,
+			PaceHighSecPerKM:    metrics.PaceHighSecPerKM,
+			Status:              metrics.Status,
+		},
+	}
+	return p.generateSummaryInput(ctx, input)
+}
+
+func (p *Processor) generateSummaryInput(ctx context.Context, input ai.SummaryInput) (ai.SummaryOutput, error) {
 	if p.summarizer == nil {
 		return ai.SummaryOutput{}, errAISummaryFailed
 	}

@@ -30,6 +30,10 @@ func (f *fakeBaselineStore) ListActivities(_ context.Context, _ string, _ time.T
 	return nil, nil
 }
 
+func (f *fakeBaselineStore) ListActivitiesBySyncJob(_ context.Context, _ string) ([]storage.Activity, error) {
+	return nil, nil
+}
+
 func (f *fakeBaselineStore) UpsertBaselineCurrent(_ context.Context, _ storage.BaselineCurrent) error {
 	return nil
 }
@@ -48,6 +52,18 @@ func (f *fakeBaselineStore) UpsertTrainingSummary(_ context.Context, _ storage.T
 
 func (f *fakeBaselineStore) GetTrainingSummary(_ context.Context, _ string) (storage.TrainingSummary, error) {
 	return storage.TrainingSummary{}, pgx.ErrNoRows
+}
+
+func (f *fakeBaselineStore) GetTrainingSummaryBySource(_ context.Context, _ string, _ string) (storage.TrainingSummary, error) {
+	return storage.TrainingSummary{}, pgx.ErrNoRows
+}
+
+func (f *fakeBaselineStore) SoftDeleteTrainingSummaryBySource(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
+func (f *fakeBaselineStore) SoftDeleteTrainingFeedbackBySource(_ context.Context, _ string, _ string) error {
+	return nil
 }
 
 func TestHandleBaselineRecalc_RequiresProcessor(t *testing.T) {
