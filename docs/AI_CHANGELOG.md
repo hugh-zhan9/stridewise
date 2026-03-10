@@ -227,3 +227,12 @@
 - `backend/config/config.yaml`
 - `backend/cmd/worker/main.go`
 ----------------------------------------
+## [2026-03-10 18:13] [Feature]
+- **Change**: 新增建议记录与反馈存储
+- **Risk Analysis**: 新增recommendations表及反馈表与存储方法，可能影响后续建议查询一致性；新表新增风险中
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/migrations/006_recommendations.sql`
+- `backend/internal/storage/postgres.go`
+- `backend/internal/storage/postgres_recommendation_test.go`
+----------------------------------------

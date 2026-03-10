@@ -77,6 +77,31 @@ type TrainingLog struct {
 	UpdatedAt          time.Time
 }
 
+type Recommendation struct {
+	RecID              string
+	UserID             string
+	RecommendationDate time.Time
+	InputJSON          []byte
+	OutputJSON         []byte
+	RiskLevel          string
+	OverrideJSON       []byte
+	IsFallback         bool
+	AIProvider         string
+	AIModel            string
+	PromptVersion      string
+	EngineVersion      string
+	CreatedAt          time.Time
+}
+
+type RecommendationFeedback struct {
+	FeedbackID string
+	RecID      string
+	UserID     string
+	Useful     string
+	Reason     string
+	CreatedAt  time.Time
+}
+
 type Activity struct {
 	UserID         string
 	DistanceM      float64
@@ -553,6 +578,46 @@ func (s *PostgresStore) CreateTrainingFeedback(ctx context.Context, feedback Tra
 		INSERT INTO training_feedbacks (feedback_id, user_id, log_id, content, created_at)
 		VALUES ($1,$2,$3,$4,NOW())
 	`, feedback.FeedbackID, feedback.UserID, feedback.LogID, feedback.Content)
+	return err
+}
+
+func (s *PostgresStore) CreateRecommendation(ctx context.Context, rec Recommendation) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO recommendations (
+			rec_id, user_id, recommendation_date, input_json, output_json, risk_level,
+			override_json, is_fallback, ai_provider, ai_model, prompt_version, engine_version, created_at
+		)
+		VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,$6,$7::jsonb,$8,$9,$10,$11,$12,NOW())
+	`, rec.RecID, rec.UserID, rec.RecommendationDate, string(rec.InputJSON), string(rec.OutputJSON),
+		rec.RiskLevel, string(rec.OverrideJSON), rec.IsFallback, rec.AIProvider, rec.AIModel, rec.PromptVersion, rec.EngineVersion)
+	return err
+}
+
+func (s *PostgresStore) GetLatestRecommendation(ctx context.Context, userID string) (Recommendation, error) {
+	var rec Recommendation
+	err := s.pool.QueryRow(ctx, `
+		SELECT rec_id, user_id, recommendation_date, input_json, output_json, risk_level, override_json,
+		       is_fallback, ai_provider, ai_model, prompt_version, engine_version, created_at
+		FROM recommendations
+		WHERE user_id=$1
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, userID).Scan(
+		&rec.RecID, &rec.UserID, &rec.RecommendationDate, &rec.InputJSON, &rec.OutputJSON,
+		&rec.RiskLevel, &rec.OverrideJSON, &rec.IsFallback, &rec.AIProvider, &rec.AIModel,
+		&rec.PromptVersion, &rec.EngineVersion, &rec.CreatedAt,
+	)
+	if err != nil {
+		return Recommendation{}, err
+	}
+	return rec, nil
+}
+
+func (s *PostgresStore) CreateRecommendationFeedback(ctx context.Context, feedback RecommendationFeedback) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO recommendation_feedbacks (feedback_id, rec_id, user_id, useful, reason, created_at)
+		VALUES ($1,$2,$3,$4,$5,NOW())
+	`, feedback.FeedbackID, feedback.RecID, feedback.UserID, feedback.Useful, feedback.Reason)
 	return err
 }
 
