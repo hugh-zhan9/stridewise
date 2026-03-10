@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5"
 
 	"stridewise/backend/internal/ai"
@@ -17,6 +18,7 @@ import (
 type Store interface {
 	CreateRecommendation(ctx context.Context, rec storage.Recommendation) error
 	GetLatestRecommendation(ctx context.Context, userID string) (storage.Recommendation, error)
+	CreateRecommendationFeedback(ctx context.Context, feedback storage.RecommendationFeedback) error
 	GetUserProfile(ctx context.Context, userID string) (storage.UserProfile, error)
 	GetBaselineCurrent(ctx context.Context, userID string) (storage.BaselineCurrent, error)
 	CreateWeatherSnapshot(ctx context.Context, s storage.WeatherSnapshot) error
@@ -33,6 +35,8 @@ type Processor struct {
 	aiProvider string
 	aiModel    string
 }
+
+var ErrFeedbackExists = errors.New("recommendation feedback exists")
 
 func NewProcessor(store Store, provider weather.Provider, recommender ai.Recommender) *Processor {
 	return &Processor{store: store, provider: provider, recommender: recommender, now: time.Now}
@@ -143,6 +147,7 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		RecID:              uuid.NewString(),
 		UserID:             userID,
 		RecommendationDate: time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC),
+		CreatedAt:          now.UTC(),
 		InputJSON:          mustJSON(input),
 		OutputJSON:         mustJSON(ruleResult.Output),
 		RiskLevel:          ruleResult.Output.RiskLevel,
@@ -157,6 +162,31 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		return storage.Recommendation{}, err
 	}
 	return rec, nil
+}
+
+func (p *Processor) GetLatest(ctx context.Context, userID string) (storage.Recommendation, error) {
+	return p.store.GetLatestRecommendation(ctx, userID)
+}
+
+func (p *Processor) Feedback(ctx context.Context, recID string, userID string, useful string, reason string) error {
+	if useful != "yes" && useful != "neutral" && useful != "no" {
+		return errors.New("useful invalid")
+	}
+	feedback := storage.RecommendationFeedback{
+		FeedbackID: uuid.NewString(),
+		RecID:      recID,
+		UserID:     userID,
+		Useful:     useful,
+		Reason:     reason,
+	}
+	if err := p.store.CreateRecommendationFeedback(ctx, feedback); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return ErrFeedbackExists
+		}
+		return err
+	}
+	return nil
 }
 
 func (p *Processor) callAI(ctx context.Context, input ai.RecommendationInput, weatherErr error) (RecommendationOutput, bool) {

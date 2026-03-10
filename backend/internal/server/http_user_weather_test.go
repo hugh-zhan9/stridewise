@@ -40,7 +40,7 @@ func TestCreateUserProfile_RequiresLocation(t *testing.T) {
 	store := &fakeStore{}
 	provider := weather.NewMockProvider(weather.SnapshotInput{TemperatureC: 20})
 
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil)
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, nil)
 
 	body := map[string]any{
 		"user_id": "u1",

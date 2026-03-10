@@ -265,3 +265,17 @@
 - `backend/internal/recommendation/rules.go`
 - `backend/internal/storage/postgres.go`
 ----------------------------------------
+## [2026-03-10 18:54] [Feature]
+- **Change**: 补齐建议编排器接线与HTTP建议接口测试，并修复推荐测试替身
+- **Risk Analysis**: 新增建议接口与编排接线可能影响生成/反馈接口行为，需回归接口返回与错误码
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/cmd/api/main.go`
+- `backend/internal/recommendation/processor.go`
+- `backend/internal/recommendation/processor_test.go`
+- `backend/internal/server/http.go`
+- `backend/internal/server/http_baseline_test.go`
+- `backend/internal/server/http_training_test.go`
+- `backend/internal/server/http_user_weather_test.go`
+- `backend/internal/server/http_recommendation_test.go`
+----------------------------------------

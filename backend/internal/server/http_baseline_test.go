@@ -29,7 +29,7 @@ func (b *baselineStoreStub) CreateTrainingFeedback(_ context.Context, _ storage.
 }
 
 func TestGetBaselineCurrent(t *testing.T) {
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, nil, nil, &baselineStoreStub{})
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, nil, nil, &baselineStoreStub{}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/internal/v1/baseline/current?user_id=u1", nil)
 	req.Header.Set("X-Internal-Token", "token")

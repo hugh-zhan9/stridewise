@@ -44,6 +44,10 @@ func (f *fakeStore) GetLatestTrainingDiscomfort(_ context.Context, _ string) (bo
 	return false, nil
 }
 
+func (f *fakeStore) CreateRecommendationFeedback(_ context.Context, _ storage.RecommendationFeedback) error {
+	return nil
+}
+
 type fakeAI struct{}
 
 func (fakeAI) Recommend(_ context.Context, _ ai.RecommendationInput) (ai.RecommendationOutput, error) {

@@ -9,7 +9,9 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"stridewise/backend/internal/ai"
 	"stridewise/backend/internal/config"
+	"stridewise/backend/internal/recommendation"
 	"stridewise/backend/internal/server"
 	"stridewise/backend/internal/storage"
 	"stridewise/backend/internal/weather"
@@ -79,6 +81,20 @@ func main() {
 		UVIndex:           3,
 	})
 
+	var recommender ai.Recommender
+	if cfg.AI.Provider == "openai" {
+		recommender = ai.NewOpenAIRecommender(ai.OpenAIConfig{
+			APIKey:      cfg.AI.OpenAI.APIKey,
+			BaseURL:     cfg.AI.OpenAI.BaseURL,
+			Model:       cfg.AI.OpenAI.Model,
+			TimeoutMs:   cfg.AI.OpenAI.TimeoutMs,
+			MaxTokens:   cfg.AI.OpenAI.MaxTokens,
+			Temperature: cfg.AI.OpenAI.Temperature,
+		})
+	}
+	recProcessor := recommendation.NewProcessor(store, mockProvider, recommender)
+	recProcessor.SetAIInfo(cfg.AI.Provider, cfg.AI.OpenAI.Model)
+
 	httpSrv := server.NewHTTPServer(
 		cfg.Server.HTTP.Addr,
 		cfg.Security.InternalToken,
@@ -92,6 +108,7 @@ func main() {
 		store,
 		store,
 		store,
+		recProcessor,
 	)
 	app := kratos.New(
 		kratos.Name("stridewise-api"),

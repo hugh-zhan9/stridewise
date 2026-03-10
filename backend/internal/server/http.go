@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"stridewise/backend/internal/middleware"
+	"stridewise/backend/internal/recommendation"
 	"stridewise/backend/internal/storage"
 	"stridewise/backend/internal/task"
 	"stridewise/backend/internal/training"
@@ -76,6 +77,12 @@ type BaselineStore interface {
 	CreateTrainingFeedback(ctx context.Context, feedback storage.TrainingFeedback) error
 }
 
+type RecommendationService interface {
+	Generate(ctx context.Context, userID string) (storage.Recommendation, error)
+	GetLatest(ctx context.Context, userID string) (storage.Recommendation, error)
+	Feedback(ctx context.Context, recID string, userID string, useful string, reason string) error
+}
+
 type createSyncJobRequest struct {
 	UserID string `json:"user_id"`
 	Source string `json:"source"`
@@ -123,6 +130,16 @@ type trainingFeedbackRequest struct {
 	Content string `json:"content"`
 }
 
+type recommendationGenerateRequest struct {
+	UserID string `json:"user_id"`
+}
+
+type recommendationFeedbackRequest struct {
+	UserID  string `json:"user_id"`
+	Useful  string `json:"useful"`
+	Reason  string `json:"reason"`
+}
+
 func NewHTTPServer(
 	addr string,
 	internalToken string,
@@ -136,6 +153,7 @@ func NewHTTPServer(
 	trainingStore TrainingLogStore,
 	asyncJobStore AsyncJobStore,
 	baselineStore BaselineStore,
+	recService RecommendationService,
 ) *kratoshttp.Server {
 	if addr == "" {
 		addr = ":8000"
@@ -550,6 +568,99 @@ func NewHTTPServer(
 		}
 	}))
 
+	srv.Handle("/internal/v1/recommendations/generate", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if recService == nil {
+			http.Error(w, "recommendation subsystem unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req recommendationGenerateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if req.UserID == "" {
+			http.Error(w, "user_id required", http.StatusBadRequest)
+			return
+		}
+		rec, err := recService.Generate(r.Context(), req.UserID)
+		if err != nil {
+			http.Error(w, "generate recommendation failed", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, formatRecommendationResponse(rec))
+	}))
+
+	srv.Handle("/internal/v1/recommendations/latest", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if recService == nil {
+			http.Error(w, "recommendation subsystem unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		userID := r.URL.Query().Get("user_id")
+		if userID == "" {
+			http.Error(w, "user_id required", http.StatusBadRequest)
+			return
+		}
+		rec, err := recService.GetLatest(r.Context(), userID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				http.Error(w, "recommendation not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, "get recommendation failed", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, formatRecommendationResponse(rec))
+	}))
+
+	srv.HandlePrefix("/internal/v1/recommendations/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if recService == nil {
+			http.Error(w, "recommendation subsystem unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		path := strings.TrimPrefix(r.URL.Path, "/internal/v1/recommendations/")
+		if !strings.HasSuffix(path, "/feedback") {
+			http.NotFound(w, r)
+			return
+		}
+		recID := strings.TrimSuffix(path, "/feedback")
+		recID = strings.TrimSuffix(recID, "/")
+		if recID == "" {
+			http.NotFound(w, r)
+			return
+		}
+
+		var req recommendationFeedbackRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if req.UserID == "" || req.Useful == "" {
+			http.Error(w, "user_id/useful required", http.StatusBadRequest)
+			return
+		}
+		if err := recService.Feedback(r.Context(), recID, req.UserID, req.Useful, req.Reason); err != nil {
+			if errors.Is(err, recommendation.ErrFeedbackExists) {
+				http.Error(w, "feedback exists", http.StatusConflict)
+				return
+			}
+			http.Error(w, "submit feedback failed", http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"rec_id": recID})
+	}))
+
 	srv.Handle("/internal/v1/baseline/current", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if baselineStore == nil {
 			http.Error(w, "baseline subsystem unavailable", http.StatusServiceUnavailable)
@@ -690,6 +801,31 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func formatRecommendationResponse(rec storage.Recommendation) map[string]any {
+	return map[string]any{
+		"rec_id":              rec.RecID,
+		"user_id":             rec.UserID,
+		"recommendation_date": rec.RecommendationDate.Format("2006-01-02"),
+		"created_at":          rec.CreatedAt,
+		"input_json":          rawJSON(rec.InputJSON),
+		"output_json":         rawJSON(rec.OutputJSON),
+		"override_json":       rawJSON(rec.OverrideJSON),
+		"risk_level":          rec.RiskLevel,
+		"is_fallback":         rec.IsFallback,
+		"ai_provider":         rec.AIProvider,
+		"ai_model":            rec.AIModel,
+		"prompt_version":      rec.PromptVersion,
+		"engine_version":      rec.EngineVersion,
+	}
+}
+
+func rawJSON(input []byte) json.RawMessage {
+	if len(input) == 0 {
+		return json.RawMessage(`{}`)
+	}
+	return json.RawMessage(input)
 }
 
 func buildTrainingLog(req trainingLogRequest) (storage.TrainingLog, time.Time, time.Time, error) {
