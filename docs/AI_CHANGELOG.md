@@ -236,3 +236,12 @@
 - `backend/internal/storage/postgres.go`
 - `backend/internal/storage/postgres_recommendation_test.go`
 ----------------------------------------
+## [2026-03-10 18:15] [Feature]
+- **Change**: 新增AI建议生成接口
+- **Risk Analysis**: 新增Recommender接口与OpenAI实现，若提示词或字段校验不当可能导致建议生成失败；风险中
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/ai/recommender.go`
+- `backend/internal/ai/openai_recommender.go`
+- `backend/internal/ai/openai_recommender_test.go`
+----------------------------------------
