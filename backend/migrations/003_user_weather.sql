@@ -1,0 +1,36 @@
+CREATE TABLE IF NOT EXISTS user_profiles (
+  user_id TEXT PRIMARY KEY,
+  gender TEXT NOT NULL,
+  age INT NOT NULL,
+  height_cm INT NOT NULL,
+  weight_kg INT NOT NULL,
+  goal_type TEXT NOT NULL,
+  goal_cycle TEXT NOT NULL,
+  goal_frequency INT NOT NULL,
+  goal_pace TEXT NOT NULL,
+  fitness_level TEXT NOT NULL,
+  location_lat DOUBLE PRECISION NOT NULL,
+  location_lng DOUBLE PRECISION NOT NULL,
+  country TEXT NOT NULL,
+  province TEXT NOT NULL,
+  city TEXT NOT NULL,
+  location_source TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS weather_snapshots (
+  snapshot_id BIGSERIAL PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  date DATE NOT NULL,
+  temperature_c DOUBLE PRECISION NOT NULL,
+  feels_like_c DOUBLE PRECISION NOT NULL,
+  humidity DOUBLE PRECISION NOT NULL,
+  wind_speed_ms DOUBLE PRECISION NOT NULL,
+  precipitation_prob DOUBLE PRECISION NOT NULL,
+  aqi INT NOT NULL,
+  uv_index DOUBLE PRECISION NOT NULL,
+  risk_level TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (user_id, date)
+);

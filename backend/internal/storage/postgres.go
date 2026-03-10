@@ -24,6 +24,41 @@ type SyncJob struct {
 	ErrorMessage string
 }
 
+type UserProfile struct {
+	UserID         string
+	Gender         string
+	Age            int
+	HeightCM       int
+	WeightKG       int
+	GoalType       string
+	GoalCycle      string
+	GoalFrequency  int
+	GoalPace       string
+	FitnessLevel   string
+	LocationLat    float64
+	LocationLng    float64
+	Country        string
+	Province       string
+	City           string
+	LocationSource string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type WeatherSnapshot struct {
+	UserID            string
+	Date              time.Time
+	TemperatureC      float64
+	FeelsLikeC        float64
+	Humidity          float64
+	WindSpeedMS       float64
+	PrecipitationProb float64
+	AQI               int
+	UVIndex           float64
+	RiskLevel         string
+	CreatedAt         time.Time
+}
+
 func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore {
 	return &PostgresStore{pool: pool}
 }
@@ -169,4 +204,95 @@ func (s *PostgresStore) RetrySyncJob(ctx context.Context, jobID string) (SyncJob
 		return SyncJob{}, err
 	}
 	return job, nil
+}
+
+func (s *PostgresStore) UpsertUserProfile(ctx context.Context, p UserProfile) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO user_profiles (
+			user_id, gender, age, height_cm, weight_kg,
+			goal_type, goal_cycle, goal_frequency, goal_pace,
+			fitness_level, location_lat, location_lng, country,
+			province, city, location_source, created_at, updated_at
+		)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW(),NOW())
+		ON CONFLICT (user_id)
+		DO UPDATE SET
+			gender=EXCLUDED.gender,
+			age=EXCLUDED.age,
+			height_cm=EXCLUDED.height_cm,
+			weight_kg=EXCLUDED.weight_kg,
+			goal_type=EXCLUDED.goal_type,
+			goal_cycle=EXCLUDED.goal_cycle,
+			goal_frequency=EXCLUDED.goal_frequency,
+			goal_pace=EXCLUDED.goal_pace,
+			fitness_level=EXCLUDED.fitness_level,
+			location_lat=EXCLUDED.location_lat,
+			location_lng=EXCLUDED.location_lng,
+			country=EXCLUDED.country,
+			province=EXCLUDED.province,
+			city=EXCLUDED.city,
+			location_source=EXCLUDED.location_source,
+			updated_at=NOW()
+	`, p.UserID, p.Gender, p.Age, p.HeightCM, p.WeightKG, p.GoalType, p.GoalCycle, p.GoalFrequency, p.GoalPace, p.FitnessLevel,
+		p.LocationLat, p.LocationLng, p.Country, p.Province, p.City, p.LocationSource)
+	return err
+}
+
+func (s *PostgresStore) GetUserProfile(ctx context.Context, userID string) (UserProfile, error) {
+	var p UserProfile
+	err := s.pool.QueryRow(ctx, `
+		SELECT user_id, gender, age, height_cm, weight_kg,
+		       goal_type, goal_cycle, goal_frequency, goal_pace,
+		       fitness_level, location_lat, location_lng, country,
+		       province, city, location_source, created_at, updated_at
+		FROM user_profiles
+		WHERE user_id=$1
+	`, userID).Scan(
+		&p.UserID, &p.Gender, &p.Age, &p.HeightCM, &p.WeightKG,
+		&p.GoalType, &p.GoalCycle, &p.GoalFrequency, &p.GoalPace,
+		&p.FitnessLevel, &p.LocationLat, &p.LocationLng, &p.Country,
+		&p.Province, &p.City, &p.LocationSource, &p.CreatedAt, &p.UpdatedAt,
+	)
+	if err != nil {
+		return UserProfile{}, err
+	}
+	return p, nil
+}
+
+func (s *PostgresStore) CreateWeatherSnapshot(ctx context.Context, w WeatherSnapshot) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO weather_snapshots (
+			user_id, date, temperature_c, feels_like_c, humidity,
+			wind_speed_ms, precipitation_prob, aqi, uv_index, risk_level, created_at
+		)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+		ON CONFLICT (user_id, date)
+		DO UPDATE SET
+			temperature_c=EXCLUDED.temperature_c,
+			feels_like_c=EXCLUDED.feels_like_c,
+			humidity=EXCLUDED.humidity,
+			wind_speed_ms=EXCLUDED.wind_speed_ms,
+			precipitation_prob=EXCLUDED.precipitation_prob,
+			aqi=EXCLUDED.aqi,
+			uv_index=EXCLUDED.uv_index,
+			risk_level=EXCLUDED.risk_level
+	`, w.UserID, w.Date, w.TemperatureC, w.FeelsLikeC, w.Humidity, w.WindSpeedMS, w.PrecipitationProb, w.AQI, w.UVIndex, w.RiskLevel)
+	return err
+}
+
+func (s *PostgresStore) GetWeatherSnapshot(ctx context.Context, userID string, date time.Time) (WeatherSnapshot, error) {
+	var w WeatherSnapshot
+	err := s.pool.QueryRow(ctx, `
+		SELECT user_id, date, temperature_c, feels_like_c, humidity,
+		       wind_speed_ms, precipitation_prob, aqi, uv_index, risk_level, created_at
+		FROM weather_snapshots
+		WHERE user_id=$1 AND date=$2
+	`, userID, date).Scan(
+		&w.UserID, &w.Date, &w.TemperatureC, &w.FeelsLikeC, &w.Humidity,
+		&w.WindSpeedMS, &w.PrecipitationProb, &w.AQI, &w.UVIndex, &w.RiskLevel, &w.CreatedAt,
+	)
+	if err != nil {
+		return WeatherSnapshot{}, err
+	}
+	return w, nil
 }
