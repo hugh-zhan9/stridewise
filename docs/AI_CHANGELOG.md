@@ -142,3 +142,16 @@
 - `backend/cmd/api/main.go`
 - `backend/migrations/003_user_weather.sql`
 ----------------------------------------
+## [2026-03-10 15:46] [Feature]
+- **Change**: 新增手动训练记录存储、接口、冲突校验与训练重算任务
+- **Risk Analysis**: 风险：训练记录冲突判断依赖时间区间，若输入时间不准确会拒绝记录；异步任务仅占位，尚未真正重算基线/建议/总结；删除为软删，旧数据仍在库中需注意统计排除。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/training/parse.go`
+- `backend/internal/training/processor.go`
+- `backend/internal/storage/postgres.go`
+- `backend/internal/server/http.go`
+- `backend/internal/task/task.go`
+- `backend/internal/worker/handler.go`
+- `backend/migrations/004_training_logs.sql`
+----------------------------------------

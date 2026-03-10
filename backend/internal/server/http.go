@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -10,10 +11,12 @@ import (
 	kratoshttp "github.com/go-kratos/kratos/v2/transport/http"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5"
 
 	"stridewise/backend/internal/middleware"
 	"stridewise/backend/internal/storage"
 	"stridewise/backend/internal/task"
+	"stridewise/backend/internal/training"
 	"stridewise/backend/internal/weather"
 )
 
@@ -52,6 +55,20 @@ type WeatherProvider interface {
 	GetSnapshot(ctx context.Context, location weather.Location) (weather.SnapshotInput, error)
 }
 
+type TrainingLogStore interface {
+	HasTrainingConflict(ctx context.Context, userID string, start time.Time, end time.Time, excludeLogID string) (bool, error)
+	CreateTrainingLog(ctx context.Context, log storage.TrainingLog) error
+	UpdateTrainingLog(ctx context.Context, log storage.TrainingLog) error
+	SoftDeleteTrainingLog(ctx context.Context, logID string) error
+	ListTrainingLogs(ctx context.Context, userID string, from time.Time, to time.Time) ([]storage.TrainingLog, error)
+	GetTrainingLog(ctx context.Context, logID string) (storage.TrainingLog, error)
+}
+
+type AsyncJobStore interface {
+	CreateAsyncJob(ctx context.Context, job storage.AsyncJob) error
+	UpdateAsyncJobStatus(ctx context.Context, jobID, status string, retryCount int, errMsg string) error
+}
+
 type createSyncJobRequest struct {
 	UserID string `json:"user_id"`
 	Source string `json:"source"`
@@ -81,6 +98,18 @@ type weatherSnapshotRequest struct {
 	Date   string `json:"date"`
 }
 
+type trainingLogRequest struct {
+	UserID             string  `json:"user_id"`
+	TrainingType       string  `json:"training_type"`
+	TrainingTypeCustom string  `json:"training_type_custom"`
+	StartTime          string  `json:"start_time"`
+	Duration           string  `json:"duration"`
+	DistanceKM         float64 `json:"distance_km"`
+	Pace               string  `json:"pace"`
+	RPE                int     `json:"rpe"`
+	Discomfort         bool    `json:"discomfort"`
+}
+
 func NewHTTPServer(
 	addr string,
 	internalToken string,
@@ -91,6 +120,8 @@ func NewHTTPServer(
 	profileStore UserProfileStore,
 	weatherStore WeatherStore,
 	weatherProvider WeatherProvider,
+	trainingStore TrainingLogStore,
+	asyncJobStore AsyncJobStore,
 ) *kratoshttp.Server {
 	if addr == "" {
 		addr = ":8000"
@@ -355,6 +386,156 @@ func NewHTTPServer(
 		})
 	}))
 
+	srv.Handle("/internal/v1/training/logs", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if trainingStore == nil {
+			http.Error(w, "training subsystem unavailable", http.StatusServiceUnavailable)
+			return
+		}
+
+		switch r.Method {
+		case http.MethodPost:
+			var req trainingLogRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			log, start, end, err := buildTrainingLog(req)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			conflict, err := trainingStore.HasTrainingConflict(r.Context(), req.UserID, start, end, "")
+			if err != nil {
+				http.Error(w, "conflict check failed", http.StatusInternalServerError)
+				return
+			}
+			if conflict {
+				http.Error(w, "training time conflict", http.StatusConflict)
+				return
+			}
+			log.LogID = uuid.NewString()
+			log.Source = "manual"
+			if err := trainingStore.CreateTrainingLog(r.Context(), log); err != nil {
+				http.Error(w, "create training log failed", http.StatusInternalServerError)
+				return
+			}
+			jobID, err := enqueueTrainingRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, log.LogID, "create")
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"log_id": log.LogID, "job_id": jobID})
+		case http.MethodGet:
+			userID := r.URL.Query().Get("user_id")
+			if userID == "" {
+				http.Error(w, "user_id required", http.StatusBadRequest)
+				return
+			}
+			from, err := parseRangeTime(r.URL.Query().Get("from"), false)
+			if err != nil {
+				http.Error(w, "invalid from", http.StatusBadRequest)
+				return
+			}
+			to, err := parseRangeTime(r.URL.Query().Get("to"), true)
+			if err != nil {
+				http.Error(w, "invalid to", http.StatusBadRequest)
+				return
+			}
+			if from.IsZero() {
+				from = time.Unix(0, 0)
+			}
+			if to.IsZero() {
+				to = time.Now()
+			}
+			logs, err := trainingStore.ListTrainingLogs(r.Context(), userID, from, to)
+			if err != nil {
+				http.Error(w, "list training logs failed", http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, http.StatusOK, logs)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
+
+	srv.HandlePrefix("/internal/v1/training/logs/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if trainingStore == nil {
+			http.Error(w, "training subsystem unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		path := strings.TrimPrefix(r.URL.Path, "/internal/v1/training/logs/")
+		logID := strings.TrimSuffix(path, "/")
+		if logID == "" {
+			http.NotFound(w, r)
+			return
+		}
+
+		switch r.Method {
+		case http.MethodPut:
+			var req trainingLogRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			log, start, end, err := buildTrainingLog(req)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			conflict, err := trainingStore.HasTrainingConflict(r.Context(), req.UserID, start, end, logID)
+			if err != nil {
+				http.Error(w, "conflict check failed", http.StatusInternalServerError)
+				return
+			}
+			if conflict {
+				http.Error(w, "training time conflict", http.StatusConflict)
+				return
+			}
+			log.LogID = logID
+			log.Source = "manual"
+			if err := trainingStore.UpdateTrainingLog(r.Context(), log); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					http.Error(w, "training log not found", http.StatusNotFound)
+					return
+				}
+				http.Error(w, "update training log failed", http.StatusInternalServerError)
+				return
+			}
+			jobID, err := enqueueTrainingRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, log.LogID, "update")
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"log_id": log.LogID, "job_id": jobID})
+		case http.MethodDelete:
+			log, err := trainingStore.GetTrainingLog(r.Context(), logID)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					http.Error(w, "training log not found", http.StatusNotFound)
+					return
+				}
+				http.Error(w, "training log not found", http.StatusNotFound)
+				return
+			}
+			if err := trainingStore.SoftDeleteTrainingLog(r.Context(), logID); err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					http.Error(w, "training log not found", http.StatusNotFound)
+					return
+				}
+				http.Error(w, "delete training log failed", http.StatusInternalServerError)
+				return
+			}
+			jobID, err := enqueueTrainingRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, logID, "delete")
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"log_id": logID, "job_id": jobID})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
+
 	return srv
 }
 
@@ -362,6 +543,119 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func buildTrainingLog(req trainingLogRequest) (storage.TrainingLog, time.Time, time.Time, error) {
+	if req.UserID == "" {
+		return storage.TrainingLog{}, time.Time{}, time.Time{}, errBadRequest("user_id required")
+	}
+	startTime, err := parseStartTime(req.StartTime)
+	if err != nil {
+		return storage.TrainingLog{}, time.Time{}, time.Time{}, errBadRequest("start_time invalid")
+	}
+	durationSec, err := training.ParseDuration(req.Duration)
+	if err != nil || durationSec <= 0 {
+		return storage.TrainingLog{}, time.Time{}, time.Time{}, errBadRequest("duration invalid")
+	}
+	if req.DistanceKM <= 0 {
+		return storage.TrainingLog{}, time.Time{}, time.Time{}, errBadRequest("distance_km invalid")
+	}
+	paceSec, err := training.ParsePace(req.Pace)
+	if err != nil {
+		return storage.TrainingLog{}, time.Time{}, time.Time{}, errBadRequest("pace invalid")
+	}
+	if req.RPE < 1 || req.RPE > 10 {
+		return storage.TrainingLog{}, time.Time{}, time.Time{}, errBadRequest("rpe invalid")
+	}
+
+	trainingType, custom, err := resolveTrainingType(req)
+	if err != nil {
+		return storage.TrainingLog{}, time.Time{}, time.Time{}, errBadRequest("training_type invalid")
+	}
+
+	log := storage.TrainingLog{
+		UserID:             req.UserID,
+		TrainingType:       trainingType,
+		TrainingTypeCustom: custom,
+		StartTime:          startTime,
+		DurationSec:        durationSec,
+		DistanceKM:         req.DistanceKM,
+		PaceStr:            req.Pace,
+		PaceSecPerKM:       paceSec,
+		RPE:                req.RPE,
+		Discomfort:         req.Discomfort,
+	}
+	endTime := startTime.Add(time.Duration(durationSec) * time.Second)
+	return log, startTime, endTime, nil
+}
+
+func resolveTrainingType(req trainingLogRequest) (string, string, error) {
+	if req.TrainingTypeCustom != "" {
+		return "custom", req.TrainingTypeCustom, nil
+	}
+	return training.NormalizeTrainingType(req.TrainingType)
+}
+
+func parseStartTime(input string) (time.Time, error) {
+	if input == "" {
+		return time.Time{}, errBadRequest("start_time required")
+	}
+	return time.ParseInLocation("2006-01-02 15:04:05", input, time.Local)
+}
+
+func parseRangeTime(input string, isEnd bool) (time.Time, error) {
+	if input == "" {
+		return time.Time{}, nil
+	}
+	if len(input) == 10 {
+		t, err := time.ParseInLocation("2006-01-02", input, time.Local)
+		if err != nil {
+			return time.Time{}, err
+		}
+		if isEnd {
+			t = t.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+		}
+		return t, nil
+	}
+	return time.ParseInLocation("2006-01-02 15:04:05", input, time.Local)
+}
+
+func enqueueTrainingRecalc(ctx context.Context, asyncJobStore AsyncJobStore, asynqClient *asynq.Client, userID string, logID string, op string) (string, error) {
+	if asyncJobStore == nil {
+		return "", errBadRequest("async subsystem unavailable")
+	}
+	jobID := uuid.NewString()
+	payload := task.TrainingRecalcPayload{
+		JobID:     jobID,
+		UserID:    userID,
+		LogID:     logID,
+		Operation: op,
+	}
+	b, err := task.EncodeTrainingRecalcPayload(payload)
+	if err != nil {
+		return "", errBadRequest("payload invalid")
+	}
+	job := storage.AsyncJob{
+		JobID:        jobID,
+		JobType:      task.TypeTrainingRecalc,
+		UserID:       userID,
+		PayloadJSON:  b,
+		Status:       "queued",
+		RetryCount:   0,
+		ErrorMessage: "",
+	}
+	if err := asyncJobStore.CreateAsyncJob(ctx, job); err != nil {
+		return "", errBadRequest("create async job failed")
+	}
+	if asynqClient == nil {
+		_ = asyncJobStore.UpdateAsyncJobStatus(ctx, jobID, "failed", 0, "enqueue client unavailable")
+		return "", errBadRequest("enqueue client unavailable")
+	}
+	if _, err := asynqClient.Enqueue(asynq.NewTask(task.TypeTrainingRecalc, b), asynq.Queue("default")); err != nil {
+		_ = asyncJobStore.UpdateAsyncJobStatus(ctx, jobID, "failed", 0, err.Error())
+		return "", errBadRequest("enqueue failed")
+	}
+	return jobID, nil
 }
 
 func validateUserProfileRequest(req userProfileRequest) error {

@@ -330,6 +330,57 @@ func (s *PostgresStore) HasTrainingConflict(ctx context.Context, userID string, 
 	return exists, nil
 }
 
+func (s *PostgresStore) ListTrainingLogs(ctx context.Context, userID string, from time.Time, to time.Time) ([]TrainingLog, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT log_id, user_id, source, training_type, training_type_custom,
+		       start_time, duration_sec, distance_km, pace_str, pace_sec_per_km,
+		       rpe, discomfort, deleted_at, created_at, updated_at
+		FROM training_logs
+		WHERE user_id=$1 AND deleted_at IS NULL AND start_time >= $2 AND start_time <= $3
+		ORDER BY start_time DESC
+	`, userID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []TrainingLog
+	for rows.Next() {
+		var log TrainingLog
+		if err := rows.Scan(
+			&log.LogID, &log.UserID, &log.Source, &log.TrainingType, &log.TrainingTypeCustom,
+			&log.StartTime, &log.DurationSec, &log.DistanceKM, &log.PaceStr, &log.PaceSecPerKM,
+			&log.RPE, &log.Discomfort, &log.DeletedAt, &log.CreatedAt, &log.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		logs = append(logs, log)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	return logs, nil
+}
+
+func (s *PostgresStore) GetTrainingLog(ctx context.Context, logID string) (TrainingLog, error) {
+	var log TrainingLog
+	err := s.pool.QueryRow(ctx, `
+		SELECT log_id, user_id, source, training_type, training_type_custom,
+		       start_time, duration_sec, distance_km, pace_str, pace_sec_per_km,
+		       rpe, discomfort, deleted_at, created_at, updated_at
+		FROM training_logs
+		WHERE log_id=$1 AND deleted_at IS NULL
+	`, logID).Scan(
+		&log.LogID, &log.UserID, &log.Source, &log.TrainingType, &log.TrainingTypeCustom,
+		&log.StartTime, &log.DurationSec, &log.DistanceKM, &log.PaceStr, &log.PaceSecPerKM,
+		&log.RPE, &log.Discomfort, &log.DeletedAt, &log.CreatedAt, &log.UpdatedAt,
+	)
+	if err != nil {
+		return TrainingLog{}, err
+	}
+	return log, nil
+}
+
 func (s *PostgresStore) UpsertUserProfile(ctx context.Context, p UserProfile) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO user_profiles (
