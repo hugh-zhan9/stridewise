@@ -6,6 +6,7 @@ import (
 )
 
 const TypeSyncJob = "sync:job"
+const TypeTrainingRecalc = "training:recalc"
 
 var allowedSources = map[string]struct{}{
 	"keep":   {},
@@ -22,6 +23,13 @@ type SyncJobPayload struct {
 	UserID     string `json:"user_id"`
 	Source     string `json:"source"`
 	RetryCount int    `json:"retry_count"`
+}
+
+type TrainingRecalcPayload struct {
+	JobID     string `json:"job_id"`
+	UserID    string `json:"user_id"`
+	LogID     string `json:"log_id"`
+	Operation string `json:"operation"`
 }
 
 func EncodeSyncJobPayload(p SyncJobPayload) ([]byte, error) {
@@ -53,6 +61,42 @@ func DecodeSyncJobPayload(b []byte) (SyncJobPayload, error) {
 	}
 	if p.RetryCount < 0 {
 		return SyncJobPayload{}, errors.New("retry_count cannot be negative")
+	}
+	return p, nil
+}
+
+func EncodeTrainingRecalcPayload(p TrainingRecalcPayload) ([]byte, error) {
+	if p.JobID == "" {
+		return nil, errors.New("job_id is required")
+	}
+	if p.UserID == "" {
+		return nil, errors.New("user_id is required")
+	}
+	if p.LogID == "" {
+		return nil, errors.New("log_id is required")
+	}
+	if p.Operation != "create" && p.Operation != "update" && p.Operation != "delete" {
+		return nil, errors.New("operation invalid")
+	}
+	return json.Marshal(p)
+}
+
+func DecodeTrainingRecalcPayload(b []byte) (TrainingRecalcPayload, error) {
+	var p TrainingRecalcPayload
+	if err := json.Unmarshal(b, &p); err != nil {
+		return TrainingRecalcPayload{}, err
+	}
+	if p.JobID == "" {
+		return TrainingRecalcPayload{}, errors.New("job_id is required")
+	}
+	if p.UserID == "" {
+		return TrainingRecalcPayload{}, errors.New("user_id is required")
+	}
+	if p.LogID == "" {
+		return TrainingRecalcPayload{}, errors.New("log_id is required")
+	}
+	if p.Operation != "create" && p.Operation != "update" && p.Operation != "delete" {
+		return TrainingRecalcPayload{}, errors.New("operation invalid")
 	}
 	return p, nil
 }

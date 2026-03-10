@@ -8,16 +8,22 @@ import (
 
 	"stridewise/backend/internal/sync"
 	"stridewise/backend/internal/task"
+	"stridewise/backend/internal/training"
 )
 
-var processor *sync.Processor
+var syncProcessor *sync.Processor
+var trainingProcessor *training.Processor
 
-func SetProcessor(p *sync.Processor) {
-	processor = p
+func SetSyncProcessor(p *sync.Processor) {
+	syncProcessor = p
+}
+
+func SetTrainingProcessor(p *training.Processor) {
+	trainingProcessor = p
 }
 
 func HandleSyncJob(ctx context.Context, t *asynq.Task) error {
-	if processor == nil {
+	if syncProcessor == nil {
 		return errors.New("sync processor is not configured")
 	}
 
@@ -26,5 +32,17 @@ func HandleSyncJob(ctx context.Context, t *asynq.Task) error {
 		return err
 	}
 
-	return processor.ProcessSyncJob(ctx, p.JobID, p.UserID, p.Source, p.RetryCount)
+	return syncProcessor.ProcessSyncJob(ctx, p.JobID, p.UserID, p.Source, p.RetryCount)
+}
+
+func HandleTrainingRecalc(ctx context.Context, t *asynq.Task) error {
+	if trainingProcessor == nil {
+		return errors.New("training processor is not configured")
+	}
+	p, err := task.DecodeTrainingRecalcPayload(t.Payload())
+	if err != nil {
+		return err
+	}
+	retryCount, _ := asynq.GetRetryCount(ctx)
+	return trainingProcessor.ProcessTrainingRecalc(ctx, p.JobID, p.UserID, p.LogID, p.Operation, retryCount)
 }

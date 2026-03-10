@@ -19,6 +19,7 @@ import (
 	"stridewise/backend/internal/storage"
 	syncjob "stridewise/backend/internal/sync"
 	"stridewise/backend/internal/task"
+	"stridewise/backend/internal/training"
 	"stridewise/backend/internal/worker"
 )
 
@@ -47,7 +48,8 @@ func main() {
 		"tcx":    tcxconnector.New(cfg.TCX.DataFile),
 		"fit":    fitconnector.New(cfg.FIT.DataFile),
 	})
-	worker.SetProcessor(processor)
+	worker.SetSyncProcessor(processor)
+	worker.SetTrainingProcessor(training.NewProcessor(store))
 
 	server := asynq.NewServer(
 		asynq.RedisClientOpt{Addr: cfg.Redis.Addr},
@@ -56,6 +58,7 @@ func main() {
 
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(task.TypeSyncJob, worker.HandleSyncJob)
+	mux.HandleFunc(task.TypeTrainingRecalc, worker.HandleTrainingRecalc)
 
 	if err := server.Run(mux); err != nil {
 		log.Fatalf("worker run failed: %v", err)
