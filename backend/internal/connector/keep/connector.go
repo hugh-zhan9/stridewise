@@ -132,13 +132,26 @@ func parseKeepRunData(detail keepRunDetail) (syncjob.RawActivity, time.Time, boo
 	keepID := extractKeepID(data.ID)
 
 	var summaryPolyline string
+	var geoPointsDecoded []map[string]any
 	if geoText, ok := data.GeoPoints.(string); ok && geoText != "" {
-		if points, err := decodeGeoPoints(geoText); err == nil && len(points) > 0 {
-			summaryPolyline = encodePolyline(points)
+		if decoded, err := decodeRunmapData(geoText, true); err == nil {
+			geoPointsDecoded = decoded
+			points := extractLatLng(decoded)
+			if len(points) > 0 {
+				summaryPolyline = encodePolyline(points)
+			}
 		}
 	}
 
+	var heartRatesDecoded []map[string]any
 	avgHeartRate := extractAverageHeartRate(data.HeartRate)
+	if m, ok := data.HeartRate.(map[string]any); ok {
+		if raw, ok := m["heartRates"].(string); ok && raw != "" {
+			if decoded, err := decodeRunmapData(raw, false); err == nil {
+				heartRatesDecoded = decoded
+			}
+		}
+	}
 
 	raw := map[string]any{
 		"run_id":            keepID,
@@ -151,6 +164,14 @@ func parseKeepRunData(detail keepRunDetail) (syncjob.RawActivity, time.Time, boo
 		"summary_polyline":  summaryPolyline,
 		"average_heartrate": avgHeartRate,
 		"elevation_gain":    nil,
+		"geo_points_raw":    data.GeoPoints,
+		"heart_rate_raw":    data.HeartRate,
+	}
+	if geoPointsDecoded != nil {
+		raw["geo_points_decoded"] = geoPointsDecoded
+	}
+	if heartRatesDecoded != nil {
+		raw["heart_rates_decoded"] = heartRatesDecoded
 	}
 
 	return syncjob.RawActivity{
@@ -195,6 +216,10 @@ func decodeGeoPoints(text string) ([][2]float64, error) {
 	if err != nil {
 		return nil, err
 	}
+	return extractLatLng(points), nil
+}
+
+func extractLatLng(points []map[string]any) [][2]float64 {
 	out := make([][2]float64, 0, len(points))
 	for _, p := range points {
 		lat, okLat := toFloat64(p["latitude"])
@@ -205,7 +230,7 @@ func decodeGeoPoints(text string) ([][2]float64, error) {
 		lat, lng = gcj2wgs(lat, lng)
 		out = append(out, [2]float64{lat, lng})
 	}
-	return out, nil
+	return out
 }
 
 func extractAverageHeartRate(v any) any {
