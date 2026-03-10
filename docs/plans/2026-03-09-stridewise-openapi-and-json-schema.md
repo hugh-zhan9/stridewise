@@ -7,13 +7,15 @@
 - ~~当前版本：v1.2.0~~
 - ~~当前版本：v1.3.0~~
 - ~~当前版本：v1.4.0~~
-- 当前版本：v1.5.0
+- ~~当前版本：v1.5.0~~
+- 当前版本：v1.6.0
 - 发布日期：2026-03-10
 - 文档状态：可评审
 
 ## 变更记录
 | 版本号 | 日期 | 变更说明 |
 | --- | --- | --- |
+| v1.6.0 | 2026-03-10 | 训练总结/反馈支持 source_type/source_id，新增训练反馈内部接口说明。 |
 | v1.5.0 | 2026-03-10 | 新增内部建议生成/反馈接口与 Recommendation 扩展字段。 |
 | v1.4.0 | 2026-03-09 | 首发数据源调整为 Keep：provider 枚举新增 `keep` 并纳入统一来源范围。 |
 | v1.3.0 | 2026-03-09 | 文档命名统一为 StrideWise；数据源枚举统一为 Strava/Garmin/Nike/GPX/TCX/FIT；明确当前阶段全部 API 为内部接口并统一使用 `X-Internal-Token`。 |
@@ -27,6 +29,9 @@
 - 主详细设计（母文档）：`docs/plans/2026-03-09-stridewise-detailed-design-v2.md`
 - ~~文档关系：本文件是详细设计的接口契约附录，专注 OpenAPI 与 AI Schema。~~
 - 文档关系：本文件属于详细设计附录，专注 API 契约与 AI 输入输出 Schema，随主设计版本联动更新。
+
+## 字段变更提示
+- ~~TrainingSummary.training_log_id / plan_match_score / completion_score / recovery_tip / summary_json~~ → 使用结构化字段并新增 `source_type/source_id`
 
 ## 1. OpenAPI 3.1（MVP 草案）
 - 当前阶段鉴权策略：
@@ -367,6 +372,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/RecommendationFeedback'
 
+  /internal/v1/training/summaries:
+    get:
+      tags: [training]
+      summary: 获取训练总结列表（内部）
+      operationId: listTrainingSummariesInternal
+      security:
+        - internalToken: []
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrainingSummary'
+
+  /internal/v1/training/feedback:
+    post:
+      tags: [training]
+      summary: 提交训练反馈（内部）
+      operationId: submitTrainingFeedbackInternal
+      security:
+        - internalToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrainingFeedbackRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrainingFeedbackResponse'
+
   /internal/health:
     get:
       tags: [internal]
@@ -545,13 +601,20 @@ components:
     TrainingSummary:
       type: object
       properties:
-        training_log_id: { type: string }
-        plan_match_score: { type: number, minimum: 0, maximum: 100 }
-        completion_score: { type: number, minimum: 0, maximum: 100 }
-        recovery_tip: { type: string }
-        summary_json:
-          type: object
-          additionalProperties: true
+        summary_id: { type: string }
+        user_id: { type: string }
+        source_type: { type: string, enum: [log, activity] }
+        source_id: { type: string }
+        log_id: { type: string, nullable: true }
+        completion_rate: { type: string }
+        intensity_match: { type: string }
+        recovery_advice: { type: string }
+        anomaly_notes: { type: string }
+        performance_notes: { type: string }
+        next_suggestion: { type: string }
+        deleted_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
 
     FeedbackRequest:
       type: object
@@ -559,6 +622,20 @@ components:
       properties:
         usefulness: { type: string, enum: [useful, neutral, not_useful] }
         reason: { type: string, maxLength: 500 }
+
+    TrainingFeedbackRequest:
+      type: object
+      required: [user_id, source_type, source_id, content]
+      properties:
+        user_id: { type: string }
+        source_type: { type: string, enum: [log, activity] }
+        source_id: { type: string }
+        content: { type: string, maxLength: 1000 }
+
+    TrainingFeedbackResponse:
+      type: object
+      properties:
+        feedback_id: { type: string }
 
     Feedback:
       type: object
