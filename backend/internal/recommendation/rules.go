@@ -4,6 +4,7 @@ type RuleInput struct {
 	WeatherRisk   string
 	HasDiscomfort bool
 	HighLoad      bool
+	RecoveryStatus string
 }
 
 type RuleResult struct {
@@ -15,6 +16,8 @@ func ApplyRules(input RuleInput, output RecommendationOutput) RuleResult {
 	override := ""
 	if input.HasDiscomfort {
 		override = "user_discomfort"
+	} else if input.RecoveryStatus == "red" {
+		override = "recovery_red"
 	} else if input.WeatherRisk == "red" {
 		override = "weather_red"
 	} else if input.HighLoad {

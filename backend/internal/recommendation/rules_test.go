@@ -22,3 +22,15 @@ func TestApplyRules_AddsAlternativeWorkoutsOnOverride(t *testing.T) {
 		t.Fatalf("expected alternative workouts")
 	}
 }
+
+func TestApplyRules_RecoveryRedOverrides(t *testing.T) {
+	input := RuleInput{RecoveryStatus: "red"}
+	out := RecommendationOutput{ShouldRun: true}
+	result := ApplyRules(input, out)
+	if result.Output.ShouldRun {
+		t.Fatalf("expected override")
+	}
+	if result.OverrideReason != "recovery_red" {
+		t.Fatalf("expected recovery_red override")
+	}
+}
