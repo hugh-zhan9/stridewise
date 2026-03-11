@@ -36,6 +36,9 @@ type UserProfile struct {
 	GoalFrequency  int
 	GoalPace       string
 	FitnessLevel   string
+	AbilityLevel   string
+	AbilityLevelReason string
+	AbilityLevelUpdatedAt *time.Time
 	RunningYears   string
 	WeeklySessions string
 	WeeklyDistanceKM string
@@ -894,11 +897,12 @@ func (s *PostgresStore) UpsertUserProfile(ctx context.Context, p UserProfile) er
 		INSERT INTO user_profiles (
 			user_id, gender, age, height_cm, weight_kg,
 			goal_type, goal_cycle, goal_frequency, goal_pace,
-			fitness_level, running_years, weekly_sessions, weekly_distance_km,
-			longest_run_km, recent_discomfort, location_lat, location_lng, country,
+			fitness_level, ability_level, ability_level_reason, ability_level_updated_at,
+			running_years, weekly_sessions, weekly_distance_km, longest_run_km, recent_discomfort,
+			location_lat, location_lng, country,
 			province, city, location_source, created_at, updated_at
 		)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,NOW(),NOW())
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,NOW(),NOW())
 		ON CONFLICT (user_id)
 		DO UPDATE SET
 			gender=EXCLUDED.gender,
@@ -910,6 +914,9 @@ func (s *PostgresStore) UpsertUserProfile(ctx context.Context, p UserProfile) er
 			goal_frequency=EXCLUDED.goal_frequency,
 			goal_pace=EXCLUDED.goal_pace,
 			fitness_level=EXCLUDED.fitness_level,
+			ability_level=CASE WHEN EXCLUDED.ability_level <> '' THEN EXCLUDED.ability_level ELSE user_profiles.ability_level END,
+			ability_level_reason=CASE WHEN EXCLUDED.ability_level <> '' THEN EXCLUDED.ability_level_reason ELSE user_profiles.ability_level_reason END,
+			ability_level_updated_at=CASE WHEN EXCLUDED.ability_level <> '' THEN EXCLUDED.ability_level_updated_at ELSE user_profiles.ability_level_updated_at END,
 			running_years=EXCLUDED.running_years,
 			weekly_sessions=EXCLUDED.weekly_sessions,
 			weekly_distance_km=EXCLUDED.weekly_distance_km,
@@ -923,6 +930,7 @@ func (s *PostgresStore) UpsertUserProfile(ctx context.Context, p UserProfile) er
 			location_source=EXCLUDED.location_source,
 			updated_at=NOW()
 	`, p.UserID, p.Gender, p.Age, p.HeightCM, p.WeightKG, p.GoalType, p.GoalCycle, p.GoalFrequency, p.GoalPace, p.FitnessLevel,
+		p.AbilityLevel, p.AbilityLevelReason, p.AbilityLevelUpdatedAt,
 		p.RunningYears, p.WeeklySessions, p.WeeklyDistanceKM, p.LongestRunKM, p.RecentDiscomfort,
 		p.LocationLat, p.LocationLng, p.Country, p.Province, p.City, p.LocationSource)
 	return err
@@ -933,16 +941,18 @@ func (s *PostgresStore) GetUserProfile(ctx context.Context, userID string) (User
 	err := s.pool.QueryRow(ctx, `
 		SELECT user_id, gender, age, height_cm, weight_kg,
 		       goal_type, goal_cycle, goal_frequency, goal_pace,
-		       fitness_level, running_years, weekly_sessions, weekly_distance_km,
-		       longest_run_km, recent_discomfort, location_lat, location_lng, country,
+		       fitness_level, ability_level, ability_level_reason, ability_level_updated_at,
+		       running_years, weekly_sessions, weekly_distance_km, longest_run_km, recent_discomfort,
+		       location_lat, location_lng, country,
 		       province, city, location_source, created_at, updated_at
 		FROM user_profiles
 		WHERE user_id=$1
 	`, userID).Scan(
 		&p.UserID, &p.Gender, &p.Age, &p.HeightCM, &p.WeightKG,
 		&p.GoalType, &p.GoalCycle, &p.GoalFrequency, &p.GoalPace,
-		&p.FitnessLevel, &p.RunningYears, &p.WeeklySessions, &p.WeeklyDistanceKM,
-		&p.LongestRunKM, &p.RecentDiscomfort, &p.LocationLat, &p.LocationLng, &p.Country,
+		&p.FitnessLevel, &p.AbilityLevel, &p.AbilityLevelReason, &p.AbilityLevelUpdatedAt,
+		&p.RunningYears, &p.WeeklySessions, &p.WeeklyDistanceKM, &p.LongestRunKM, &p.RecentDiscomfort,
+		&p.LocationLat, &p.LocationLng, &p.Country,
 		&p.Province, &p.City, &p.LocationSource, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {

@@ -40,6 +40,7 @@ func TestUserProfileUpsertAndGet(t *testing.T) {
 		City:           "Shanghai",
 		LocationSource: "manual",
 	}
+	setStringField(t, &profile, "AbilityLevel", "beginner")
 	setStringField(t, &profile, "RunningYears", "1-3")
 	setStringField(t, &profile, "WeeklySessions", "2-3")
 	setStringField(t, &profile, "WeeklyDistanceKM", "5-15")
@@ -55,6 +56,7 @@ func TestUserProfileUpsertAndGet(t *testing.T) {
 	if got.LocationLat != 31.2 {
 		t.Fatalf("expected lat 31.2, got %v", got.LocationLat)
 	}
+	assertStringField(t, got, "AbilityLevel", "beginner")
 	assertStringField(t, got, "RunningYears", "1-3")
 	assertStringField(t, got, "WeeklySessions", "2-3")
 	assertStringField(t, got, "WeeklyDistanceKM", "5-15")
