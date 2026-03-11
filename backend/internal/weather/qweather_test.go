@@ -67,3 +67,49 @@ func TestParseQWeatherForecasts(t *testing.T) {
 		t.Fatalf("expected time in UTC")
 	}
 }
+
+func TestParseQWeatherAirDailyForecasts(t *testing.T) {
+	payload := `{"days":[{"forecastStartTime":"2026-03-11T00:00Z","indexes":[{"code":"local","aqi":80},{"code":"qaqi","aqi":60}]}]}`
+	got, err := parseQWeatherAirDaily([]byte(payload))
+	if err != nil {
+		t.Fatalf("parse err: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 forecast")
+	}
+	if got[0].AQILocal == nil || *got[0].AQILocal != 80 {
+		t.Fatalf("expected local aqi 80")
+	}
+	if got[0].AQIQAQI == nil || *got[0].AQIQAQI != 60 {
+		t.Fatalf("expected qaqi 60")
+	}
+}
+
+func TestMergeForecastAQI(t *testing.T) {
+	aqiLocal := 80
+	aqiQAQI := 60
+	forecastDate := time.Date(2026, 3, 11, 0, 0, 0, 0, time.UTC)
+	forecasts := []ForecastInput{{Date: forecastDate}}
+	air := []ForecastInput{{Date: forecastDate, AQILocal: &aqiLocal, AQIQAQI: &aqiQAQI}}
+
+	got, err := mergeForecastAQI(forecasts, air)
+	if err != nil {
+		t.Fatalf("merge err: %v", err)
+	}
+	if got[0].AQISource == nil || *got[0].AQISource != "local" {
+		t.Fatalf("expected aqi_source local")
+	}
+	if got[0].AQILocal == nil || *got[0].AQILocal != 80 {
+		t.Fatalf("expected aqi_local 80")
+	}
+}
+
+func TestMergeForecastAQI_MissingAQI(t *testing.T) {
+	forecastDate := time.Date(2026, 3, 11, 0, 0, 0, 0, time.UTC)
+	forecasts := []ForecastInput{{Date: forecastDate}}
+	air := []ForecastInput{{Date: forecastDate}}
+
+	if _, err := mergeForecastAQI(forecasts, air); err == nil {
+		t.Fatalf("expected error for missing aqi")
+	}
+}

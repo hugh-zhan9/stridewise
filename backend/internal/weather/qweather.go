@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,9 +19,9 @@ type QWeatherConfig struct {
 }
 
 type QWeatherProvider struct {
-	apiKey string
+	apiKey  string
 	apiHost string
-	client *http.Client
+	client  *http.Client
 }
 
 func NewQWeatherProvider(cfg QWeatherConfig) *QWeatherProvider {
@@ -29,9 +30,9 @@ func NewQWeatherProvider(cfg QWeatherConfig) *QWeatherProvider {
 		timeout = 3 * time.Second
 	}
 	return &QWeatherProvider{
-		apiKey: cfg.APIKey,
+		apiKey:  cfg.APIKey,
 		apiHost: cfg.APIHost,
-		client: &http.Client{Timeout: timeout},
+		client:  &http.Client{Timeout: timeout},
 	}
 }
 
@@ -55,7 +56,15 @@ func (p *QWeatherProvider) GetForecast(ctx context.Context, location Location) (
 	if p.apiKey == "" {
 		return nil, errors.New("qweather api_key required")
 	}
-	return p.fetchForecasts(ctx, location)
+	forecasts, err := p.fetchForecasts(ctx, location)
+	if err != nil {
+		return nil, err
+	}
+	airDaily, err := p.fetchAirDailyForecasts(ctx, location)
+	if err != nil {
+		return nil, err
+	}
+	return mergeForecastAQI(forecasts, airDaily)
 }
 
 func (p *QWeatherProvider) fetchNow(ctx context.Context, location Location) (SnapshotInput, error) {
@@ -80,6 +89,34 @@ func (p *QWeatherProvider) fetchForecasts(ctx context.Context, location Location
 		return nil, err
 	}
 	return parseQWeatherForecastsFromResponse(payload)
+}
+
+func (p *QWeatherProvider) fetchAirDailyForecasts(ctx context.Context, location Location) ([]ForecastInput, error) {
+	host := strings.TrimSpace(p.apiHost)
+	if host == "" {
+		return nil, errors.New("qweather api_host required")
+	}
+	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
+		host = "https://" + host
+	}
+	url := fmt.Sprintf("%s/airquality/v1/daily/%.2f/%.2f?key=%s&localTime=true", host, location.Lat, location.Lng, p.apiKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return nil, fmt.Errorf("qweather http status %d", resp.StatusCode)
+	}
+	var payload qweatherAirDailyResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	return parseQWeatherAirDailyFromResponse(payload)
 }
 
 func (p *QWeatherProvider) do(ctx context.Context, path string, location Location, out any) error {
@@ -132,34 +169,44 @@ type qweatherAirResponse struct {
 type qweatherForecastResponse struct {
 	Code  string `json:"code"`
 	Daily []struct {
-		FxDate        string `json:"fxDate"`
-		TempMax       string `json:"tempMax"`
-		TempMin       string `json:"tempMin"`
-		Humidity      string `json:"humidity"`
-		Precip        string `json:"precip"`
-		Pressure      string `json:"pressure"`
-		Vis           string `json:"vis"`
-		Cloud         string `json:"cloud"`
-		UVIndex       string `json:"uvIndex"`
-		TextDay       string `json:"textDay"`
-		TextNight     string `json:"textNight"`
-		IconDay       string `json:"iconDay"`
-		IconNight     string `json:"iconNight"`
-		Wind360Day    string `json:"wind360Day"`
-		WindDirDay    string `json:"windDirDay"`
-		WindScaleDay  string `json:"windScaleDay"`
-		WindSpeedDay  string `json:"windSpeedDay"`
-		Wind360Night  string `json:"wind360Night"`
-		WindDirNight  string `json:"windDirNight"`
+		FxDate         string `json:"fxDate"`
+		TempMax        string `json:"tempMax"`
+		TempMin        string `json:"tempMin"`
+		Humidity       string `json:"humidity"`
+		Precip         string `json:"precip"`
+		Pressure       string `json:"pressure"`
+		Vis            string `json:"vis"`
+		Cloud          string `json:"cloud"`
+		UVIndex        string `json:"uvIndex"`
+		TextDay        string `json:"textDay"`
+		TextNight      string `json:"textNight"`
+		IconDay        string `json:"iconDay"`
+		IconNight      string `json:"iconNight"`
+		Wind360Day     string `json:"wind360Day"`
+		WindDirDay     string `json:"windDirDay"`
+		WindScaleDay   string `json:"windScaleDay"`
+		WindSpeedDay   string `json:"windSpeedDay"`
+		Wind360Night   string `json:"wind360Night"`
+		WindDirNight   string `json:"windDirNight"`
 		WindScaleNight string `json:"windScaleNight"`
 		WindSpeedNight string `json:"windSpeedNight"`
-		Sunrise       string `json:"sunrise"`
-		Sunset        string `json:"sunset"`
-		Moonrise      string `json:"moonrise"`
-		Moonset       string `json:"moonset"`
-		MoonPhase     string `json:"moonPhase"`
-		MoonPhaseIcon string `json:"moonPhaseIcon"`
+		Sunrise        string `json:"sunrise"`
+		Sunset         string `json:"sunset"`
+		Moonrise       string `json:"moonrise"`
+		Moonset        string `json:"moonset"`
+		MoonPhase      string `json:"moonPhase"`
+		MoonPhaseIcon  string `json:"moonPhaseIcon"`
 	} `json:"daily"`
+}
+
+type qweatherAirDailyResponse struct {
+	Days []struct {
+		ForecastStartTime string `json:"forecastStartTime"`
+		Indexes           []struct {
+			Code string  `json:"code"`
+			AQI  float64 `json:"aqi"`
+		} `json:"indexes"`
+	} `json:"days"`
 }
 
 func parseQWeatherNow(input []byte) (SnapshotInput, error) {
@@ -356,6 +403,85 @@ func parseQWeatherForecastsFromResponse(payload qweatherForecastResponse) ([]For
 		})
 	}
 	return out, nil
+}
+
+func parseQWeatherAirDaily(input []byte) ([]ForecastInput, error) {
+	var payload qweatherAirDailyResponse
+	if err := json.Unmarshal(input, &payload); err != nil {
+		return nil, err
+	}
+	return parseQWeatherAirDailyFromResponse(payload)
+}
+
+func parseQWeatherAirDailyFromResponse(payload qweatherAirDailyResponse) ([]ForecastInput, error) {
+	out := make([]ForecastInput, 0, len(payload.Days))
+	for _, day := range payload.Days {
+		dateStr := ""
+		if len(day.ForecastStartTime) >= 10 {
+			dateStr = day.ForecastStartTime[:10]
+		}
+		if dateStr == "" {
+			return nil, errors.New("qweather air daily forecastStartTime missing")
+		}
+		date, err := time.Parse("2006-01-02", dateStr)
+		if err != nil {
+			return nil, err
+		}
+		var localAQI *int
+		var qaqi *int
+		for _, idx := range day.Indexes {
+			val := int(math.Round(idx.AQI))
+			if idx.Code == "qaqi" {
+				qaqi = &val
+				continue
+			}
+			if localAQI == nil {
+				localAQI = &val
+			}
+		}
+		out = append(out, ForecastInput{
+			Date:      date,
+			AQILocal:  localAQI,
+			AQIQAQI:   qaqi,
+			AQISource: nil,
+		})
+	}
+	return out, nil
+}
+
+func mergeForecastAQI(forecasts []ForecastInput, airDaily []ForecastInput) ([]ForecastInput, error) {
+	if len(forecasts) == 0 {
+		return forecasts, nil
+	}
+	airMap := make(map[string]ForecastInput, len(airDaily))
+	for _, air := range airDaily {
+		airMap[air.Date.Format("2006-01-02")] = air
+	}
+	for i := range forecasts {
+		key := forecasts[i].Date.Format("2006-01-02")
+		air, ok := airMap[key]
+		if !ok {
+			return nil, fmt.Errorf("air daily forecast missing for %s", key)
+		}
+		forecasts[i].AQILocal = air.AQILocal
+		forecasts[i].AQIQAQI = air.AQIQAQI
+		source, err := pickAQISource(air.AQILocal, air.AQIQAQI)
+		if err != nil {
+			return nil, err
+		}
+		forecasts[i].AQISource = &source
+	}
+	return forecasts, nil
+}
+
+func pickAQISource(local *int, qaqi *int) (string, error) {
+	if local != nil {
+		return "local", nil
+	}
+	if qaqi != nil {
+		return "qaqi", nil
+	}
+	return "", errors.New("forecast aqi missing")
 }
 
 func parseFloat(input string) (float64, error) {

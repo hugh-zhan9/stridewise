@@ -12,6 +12,9 @@ type ForecastInput struct {
 	VisibilityKM     *float64
 	CloudPct         *float64
 	UVIndex          *float64
+	AQILocal         *int
+	AQIQAQI          *int
+	AQISource        *string
 	TextDay          *string
 	TextNight        *string
 	IconDay          *string
