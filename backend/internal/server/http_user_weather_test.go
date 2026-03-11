@@ -18,7 +18,6 @@ type fakeStore struct {
 	snap    storage.WeatherSnapshot
 }
 
-
 func (f *fakeStore) UpsertUserProfile(_ context.Context, p storage.UserProfile) error {
 	f.profile = p
 	return nil
@@ -45,15 +44,15 @@ func TestCreateUserProfile_RequiresLocation(t *testing.T) {
 	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil)
 
 	body := map[string]any{
-		"user_id": "u1",
-		"gender": "male",
-		"age": 20,
-		"height_cm": 175,
-		"weight_kg": 65,
-		"goal_type": "5k",
-		"goal_cycle": "8w",
+		"user_id":        "u1",
+		"gender":         "male",
+		"age":            20,
+		"height_cm":      175,
+		"weight_kg":      65,
+		"goal_type":      "5k",
+		"goal_cycle":     "8w",
 		"goal_frequency": 3,
-		"goal_pace": "05:30",
+		"goal_pace":      "05:30",
 	}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/internal/v1/user/profile", bytes.NewReader(b))
@@ -73,26 +72,26 @@ func TestCreateUserProfile_PersistsQuestionnaire(t *testing.T) {
 	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil)
 
 	body := map[string]any{
-		"user_id": "u1",
-		"gender": "male",
-		"age": 20,
-		"height_cm": 175,
-		"weight_kg": 65,
-		"goal_type": "5k",
-		"goal_cycle": "8w",
-		"goal_frequency": 3,
-		"goal_pace": "05:30",
-		"location_lat": 31.2,
-		"location_lng": 121.5,
-		"country": "CN",
-		"province": "SH",
-		"city": "Shanghai",
-		"location_source": "manual",
-		"running_years": "1-3",
-		"weekly_sessions": "2-3",
+		"user_id":            "u1",
+		"gender":             "male",
+		"age":                20,
+		"height_cm":          175,
+		"weight_kg":          65,
+		"goal_type":          "5k",
+		"goal_cycle":         "8w",
+		"goal_frequency":     3,
+		"goal_pace":          "05:30",
+		"location_lat":       31.2,
+		"location_lng":       121.5,
+		"country":            "CN",
+		"province":           "SH",
+		"city":               "Shanghai",
+		"location_source":    "manual",
+		"running_years":      "1-3",
+		"weekly_sessions":    "2-3",
 		"weekly_distance_km": "5-15",
-		"longest_run_km": "10",
-		"recent_discomfort": "no",
+		"longest_run_km":     "10",
+		"recent_discomfort":  "no",
 	}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/internal/v1/user/profile", bytes.NewReader(b))
@@ -119,6 +118,49 @@ func TestCreateUserProfile_PersistsQuestionnaire(t *testing.T) {
 	}
 }
 
+func TestCreateUserProfile_PersistsRestingHR(t *testing.T) {
+	store := &fakeStore{}
+	provider := weather.NewMockProvider(weather.SnapshotInput{TemperatureC: 20})
+	enqueuer := &abilityEnqueuerStub{}
+
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil)
+
+	body := map[string]any{
+		"user_id":            "u1",
+		"gender":             "male",
+		"age":                20,
+		"height_cm":          175,
+		"weight_kg":          65,
+		"resting_hr":         55,
+		"goal_type":          "5k",
+		"goal_cycle":         "8w",
+		"goal_frequency":     3,
+		"goal_pace":          "05:30",
+		"location_lat":       31.2,
+		"location_lng":       121.5,
+		"country":            "CN",
+		"province":           "SH",
+		"city":               "Shanghai",
+		"location_source":    "manual",
+		"running_years":      "1-3",
+		"weekly_sessions":    "2-3",
+		"weekly_distance_km": "5-15",
+		"longest_run_km":     "10",
+		"recent_discomfort":  "no",
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/internal/v1/user/profile", bytes.NewReader(b))
+	req.Header.Set("X-Internal-Token", "token")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if store.profile.RestingHR != 55 {
+		t.Fatalf("expected resting_hr 55, got %d", store.profile.RestingHR)
+	}
+}
+
 func TestCreateUserProfile_RejectsManualAbilityLevel(t *testing.T) {
 	store := &fakeStore{}
 	provider := weather.NewMockProvider(weather.SnapshotInput{TemperatureC: 20})
@@ -127,28 +169,28 @@ func TestCreateUserProfile_RejectsManualAbilityLevel(t *testing.T) {
 	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil)
 
 	body := map[string]any{
-		"user_id": "u1",
-		"gender": "male",
-		"age": 20,
-		"height_cm": 175,
-		"weight_kg": 65,
-		"goal_type": "5k",
-		"goal_cycle": "8w",
-		"goal_frequency": 3,
-		"goal_pace": "05:30",
-		"location_lat": 31.2,
-		"location_lng": 121.5,
-		"country": "CN",
-		"province": "SH",
-		"city": "Shanghai",
-		"location_source": "manual",
-		"running_years": "1-3",
-		"weekly_sessions": "2-3",
+		"user_id":            "u1",
+		"gender":             "male",
+		"age":                20,
+		"height_cm":          175,
+		"weight_kg":          65,
+		"goal_type":          "5k",
+		"goal_cycle":         "8w",
+		"goal_frequency":     3,
+		"goal_pace":          "05:30",
+		"location_lat":       31.2,
+		"location_lng":       121.5,
+		"country":            "CN",
+		"province":           "SH",
+		"city":               "Shanghai",
+		"location_source":    "manual",
+		"running_years":      "1-3",
+		"weekly_sessions":    "2-3",
 		"weekly_distance_km": "5-15",
-		"longest_run_km": "10",
-		"recent_discomfort": "no",
-		"fitness_level": "beginner",
-		"ability_level": "advanced",
+		"longest_run_km":     "10",
+		"recent_discomfort":  "no",
+		"fitness_level":      "beginner",
+		"ability_level":      "advanced",
 	}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/internal/v1/user/profile", bytes.NewReader(b))

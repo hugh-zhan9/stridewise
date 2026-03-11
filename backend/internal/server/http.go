@@ -99,6 +99,7 @@ type userProfileRequest struct {
 	Age              int      `json:"age"`
 	HeightCM         int      `json:"height_cm"`
 	WeightKG         int      `json:"weight_kg"`
+	RestingHR        int      `json:"resting_hr"`
 	GoalType         string   `json:"goal_type"`
 	GoalCycle        string   `json:"goal_cycle"`
 	GoalFrequency    int      `json:"goal_frequency"`
@@ -351,6 +352,7 @@ func NewHTTPServer(
 				Age:              req.Age,
 				HeightCM:         req.HeightCM,
 				WeightKG:         req.WeightKG,
+				RestingHR:        req.RestingHR,
 				GoalType:         req.GoalType,
 				GoalCycle:        req.GoalCycle,
 				GoalFrequency:    req.GoalFrequency,
@@ -1262,6 +1264,12 @@ func validateUserProfileRequest(req userProfileRequest) error {
 	}
 	if req.Gender == "" || req.Age <= 0 || req.HeightCM <= 0 || req.WeightKG <= 0 {
 		return errBadRequest("basic profile required")
+	}
+	if req.RestingHR < 0 {
+		return errBadRequest("resting_hr invalid")
+	}
+	if req.RestingHR > 0 && (req.RestingHR < 30 || req.RestingHR > 120) {
+		return errBadRequest("resting_hr invalid")
 	}
 	if req.GoalType == "" || req.GoalCycle == "" || req.GoalFrequency <= 0 || req.GoalPace == "" {
 		return errBadRequest("goal required")

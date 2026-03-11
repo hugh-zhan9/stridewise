@@ -87,6 +87,53 @@ func TestUserProfileUpsertAndGet(t *testing.T) {
 	}
 }
 
+func TestUserProfileRestingHR(t *testing.T) {
+	dsn := os.Getenv("STRIDEWISE_TEST_DSN")
+	if dsn == "" {
+		t.Skip("STRIDEWISE_TEST_DSN not set")
+	}
+	pool, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		t.Fatalf("connect failed: %v", err)
+	}
+	defer pool.Close()
+
+	store := NewPostgresStore(pool)
+	profile := UserProfile{
+		UserID:           "u-rest-1",
+		Gender:           "male",
+		Age:              30,
+		HeightCM:         175,
+		WeightKG:         70,
+		GoalType:         "health",
+		GoalCycle:        "12w",
+		GoalFrequency:    3,
+		GoalPace:         "05'30''",
+		RunningYears:     "1-3",
+		WeeklySessions:   "2-3",
+		WeeklyDistanceKM: "5-15",
+		LongestRunKM:     "5-10",
+		RecentDiscomfort: "no",
+		LocationLat:      39.9,
+		LocationLng:      116.4,
+		Country:          "CN",
+		Province:         "BJ",
+		City:             "Beijing",
+		LocationSource:   "manual",
+		RestingHR:        55,
+	}
+	if err := store.UpsertUserProfile(context.Background(), profile); err != nil {
+		t.Fatalf("upsert failed: %v", err)
+	}
+	got, err := store.GetUserProfile(context.Background(), profile.UserID)
+	if err != nil {
+		t.Fatalf("get failed: %v", err)
+	}
+	if got.RestingHR != 55 {
+		t.Fatalf("expected resting_hr 55, got %d", got.RestingHR)
+	}
+}
+
 func setStringField(t *testing.T, target any, name string, value string) {
 	t.Helper()
 	v := reflect.ValueOf(target)
