@@ -54,6 +54,37 @@ type RecommendationWeather struct {
 	AQI               int     `json:"aqi"`
 	UVIndex           float64 `json:"uv_index"`
 	RiskLevel         string  `json:"risk_level"`
+	Forecasts         []RecommendationForecast `json:"forecasts"`
+}
+
+type RecommendationForecast struct {
+	Date             string   `json:"date"`
+	TempMaxC         *float64 `json:"temp_max_c"`
+	TempMinC         *float64 `json:"temp_min_c"`
+	Humidity         *float64 `json:"humidity"`
+	PrecipMM         *float64 `json:"precip_mm"`
+	PressureHPA      *float64 `json:"pressure_hpa"`
+	VisibilityKM     *float64 `json:"visibility_km"`
+	CloudPct         *float64 `json:"cloud_pct"`
+	UVIndex          *float64 `json:"uv_index"`
+	TextDay          *string  `json:"text_day"`
+	TextNight        *string  `json:"text_night"`
+	IconDay          *string  `json:"icon_day"`
+	IconNight        *string  `json:"icon_night"`
+	Wind360Day       *int     `json:"wind360_day"`
+	WindDirDay       *string  `json:"wind_dir_day"`
+	WindScaleDay     *string  `json:"wind_scale_day"`
+	WindSpeedDayMS   *float64 `json:"wind_speed_day_ms"`
+	Wind360Night     *int     `json:"wind360_night"`
+	WindDirNight     *string  `json:"wind_dir_night"`
+	WindScaleNight   *string  `json:"wind_scale_night"`
+	WindSpeedNightMS *float64 `json:"wind_speed_night_ms"`
+	SunriseTime      *string  `json:"sunrise_time"`
+	SunsetTime       *string  `json:"sunset_time"`
+	MoonriseTime     *string  `json:"moonrise_time"`
+	MoonsetTime      *string  `json:"moonset_time"`
+	MoonPhase        *string  `json:"moon_phase"`
+	MoonPhaseIcon    *string  `json:"moon_phase_icon"`
 }
 
 type TrainingLoadSummary struct {

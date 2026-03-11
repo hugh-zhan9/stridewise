@@ -23,6 +23,7 @@ type Store interface {
 	GetBaselineCurrent(ctx context.Context, userID string) (storage.BaselineCurrent, error)
 	CreateWeatherSnapshot(ctx context.Context, s storage.WeatherSnapshot) error
 	GetLatestWeatherSnapshot(ctx context.Context, userID string) (storage.WeatherSnapshot, error)
+	UpsertWeatherForecasts(ctx context.Context, forecasts []storage.WeatherForecast) error
 	GetRecentTrainingSummary(ctx context.Context, userID string, from time.Time, to time.Time) (storage.TrainingLoadSummary, error)
 	GetLatestTrainingDiscomfort(ctx context.Context, userID string) (bool, error)
 }
@@ -73,6 +74,7 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		City:     profile.City,
 	}
 	weatherInput, weatherRisk, weatherErr := p.fetchWeather(ctx, userID, location)
+	forecastInputs := p.fetchForecasts(ctx, userID, location)
 	loadSummary, _ := p.store.GetRecentTrainingSummary(ctx, userID, now.Add(-7*24*time.Hour), now)
 	hasDiscomfort, _ := p.store.GetLatestTrainingDiscomfort(ctx, userID)
 
@@ -117,6 +119,7 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 			AQI:               weatherInput.AQI,
 			UVIndex:           weatherInput.UVIndex,
 			RiskLevel:         string(weatherRisk),
+			Forecasts:         mapForecasts(forecastInputs),
 		},
 		TrainingLoad7D: ai.TrainingLoadSummary{
 			Sessions: loadSummary.Sessions,
@@ -162,6 +165,53 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		return storage.Recommendation{}, err
 	}
 	return rec, nil
+}
+
+func mapForecasts(input []weather.ForecastInput) []ai.RecommendationForecast {
+	if len(input) == 0 {
+		return []ai.RecommendationForecast{}
+	}
+	out := make([]ai.RecommendationForecast, 0, len(input))
+	for _, f := range input {
+		out = append(out, ai.RecommendationForecast{
+			Date:             f.Date.Format("2006-01-02"),
+			TempMaxC:         f.TempMaxC,
+			TempMinC:         f.TempMinC,
+			Humidity:         f.Humidity,
+			PrecipMM:         f.PrecipMM,
+			PressureHPA:      f.PressureHPA,
+			VisibilityKM:     f.VisibilityKM,
+			CloudPct:         f.CloudPct,
+			UVIndex:          f.UVIndex,
+			TextDay:          f.TextDay,
+			TextNight:        f.TextNight,
+			IconDay:          f.IconDay,
+			IconNight:        f.IconNight,
+			Wind360Day:       f.Wind360Day,
+			WindDirDay:       f.WindDirDay,
+			WindScaleDay:     f.WindScaleDay,
+			WindSpeedDayMS:   f.WindSpeedDayMS,
+			Wind360Night:     f.Wind360Night,
+			WindDirNight:     f.WindDirNight,
+			WindScaleNight:   f.WindScaleNight,
+			WindSpeedNightMS: f.WindSpeedNightMS,
+			SunriseTime:      formatTimePtr(f.SunriseTime),
+			SunsetTime:       formatTimePtr(f.SunsetTime),
+			MoonriseTime:     formatTimePtr(f.MoonriseTime),
+			MoonsetTime:      formatTimePtr(f.MoonsetTime),
+			MoonPhase:        f.MoonPhase,
+			MoonPhaseIcon:    f.MoonPhaseIcon,
+		})
+	}
+	return out
+}
+
+func formatTimePtr(input *time.Time) *string {
+	if input == nil {
+		return nil
+	}
+	val := input.Format("15:04:05")
+	return &val
 }
 
 func (p *Processor) GetLatest(ctx context.Context, userID string) (storage.Recommendation, error) {
@@ -236,6 +286,52 @@ func (p *Processor) fetchWeather(ctx context.Context, userID string, location we
 	}
 	risk := weather.ClassifyRisk(input)
 	return input, risk, nil
+}
+
+func (p *Processor) fetchForecasts(ctx context.Context, userID string, location weather.Location) []weather.ForecastInput {
+	forecasts, err := p.provider.GetForecast(ctx, location)
+	if err != nil {
+		return nil
+	}
+	if len(forecasts) == 0 {
+		return nil
+	}
+	storageForecasts := make([]storage.WeatherForecast, 0, len(forecasts))
+	for _, f := range forecasts {
+		storageForecasts = append(storageForecasts, storage.WeatherForecast{
+			ForecastID:       uuid.NewString(),
+			UserID:           userID,
+			ForecastDate:     f.Date,
+			TempMaxC:         f.TempMaxC,
+			TempMinC:         f.TempMinC,
+			Humidity:         f.Humidity,
+			PrecipMM:         f.PrecipMM,
+			PressureHPA:      f.PressureHPA,
+			VisibilityKM:     f.VisibilityKM,
+			CloudPct:         f.CloudPct,
+			UVIndex:          f.UVIndex,
+			TextDay:          f.TextDay,
+			TextNight:        f.TextNight,
+			IconDay:          f.IconDay,
+			IconNight:        f.IconNight,
+			Wind360Day:       f.Wind360Day,
+			WindDirDay:       f.WindDirDay,
+			WindScaleDay:     f.WindScaleDay,
+			WindSpeedDayMS:   f.WindSpeedDayMS,
+			Wind360Night:     f.Wind360Night,
+			WindDirNight:     f.WindDirNight,
+			WindScaleNight:   f.WindScaleNight,
+			WindSpeedNightMS: f.WindSpeedNightMS,
+			SunriseTime:      f.SunriseTime,
+			SunsetTime:       f.SunsetTime,
+			MoonriseTime:     f.MoonriseTime,
+			MoonsetTime:      f.MoonsetTime,
+			MoonPhase:        f.MoonPhase,
+			MoonPhaseIcon:    f.MoonPhaseIcon,
+		})
+	}
+	_ = p.store.UpsertWeatherForecasts(ctx, storageForecasts)
+	return forecasts
 }
 
 func isHighLoad(b storage.BaselineCurrent) bool {

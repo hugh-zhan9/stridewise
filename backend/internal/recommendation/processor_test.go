@@ -2,6 +2,7 @@ package recommendation
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -12,10 +13,12 @@ import (
 
 type fakeStore struct {
 	created bool
+	lastRec storage.Recommendation
 }
 
-func (f *fakeStore) CreateRecommendation(_ context.Context, _ storage.Recommendation) error {
+func (f *fakeStore) CreateRecommendation(_ context.Context, rec storage.Recommendation) error {
 	f.created = true
+	f.lastRec = rec
 	return nil
 }
 
@@ -34,6 +37,10 @@ func (f *fakeStore) GetBaselineCurrent(_ context.Context, _ string) (storage.Bas
 func (f *fakeStore) CreateWeatherSnapshot(_ context.Context, _ storage.WeatherSnapshot) error { return nil }
 func (f *fakeStore) GetLatestWeatherSnapshot(_ context.Context, _ string) (storage.WeatherSnapshot, error) {
 	return storage.WeatherSnapshot{}, nil
+}
+
+func (f *fakeStore) UpsertWeatherForecasts(_ context.Context, _ []storage.WeatherForecast) error {
+	return nil
 }
 
 func (f *fakeStore) GetRecentTrainingSummary(_ context.Context, _ string, _ time.Time, _ time.Time) (storage.TrainingLoadSummary, error) {
@@ -70,6 +77,14 @@ func (fakeWeather) GetSnapshot(_ context.Context, _ weather.Location) (weather.S
 	return weather.SnapshotInput{TemperatureC: 20}, nil
 }
 
+func (fakeWeather) GetForecast(_ context.Context, _ weather.Location) ([]weather.ForecastInput, error) {
+	tempMax := 25.0
+	return []weather.ForecastInput{{
+		Date:     time.Date(2026, 3, 11, 0, 0, 0, 0, time.UTC),
+		TempMaxC: &tempMax,
+	}}, nil
+}
+
 func TestGenerateRecommendation(t *testing.T) {
 	store := &fakeStore{}
 	p := NewProcessor(store, fakeWeather{}, fakeAI{})
@@ -79,5 +94,13 @@ func TestGenerateRecommendation(t *testing.T) {
 	}
 	if !store.created {
 		t.Fatalf("expected create recommendation")
+	}
+
+	var input ai.RecommendationInput
+	if err := json.Unmarshal(store.lastRec.InputJSON, &input); err != nil {
+		t.Fatalf("unmarshal input: %v", err)
+	}
+	if len(input.Weather.Forecasts) != 1 {
+		t.Fatalf("expected 1 forecast in input")
 	}
 }
