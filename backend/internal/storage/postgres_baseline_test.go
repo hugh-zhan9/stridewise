@@ -125,3 +125,38 @@ func TestListTrainingSummariesIncludesActivity(t *testing.T) {
 		t.Fatalf("expected activity summary in list")
 	}
 }
+
+func TestGetLatestTrainingFeedback(t *testing.T) {
+	dsn := os.Getenv("STRIDEWISE_TEST_DSN")
+	if dsn == "" {
+		t.Skip("STRIDEWISE_TEST_DSN not set")
+	}
+	pool, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		t.Fatalf("connect failed: %v", err)
+	}
+	defer pool.Close()
+
+	store := NewPostgresStore(pool)
+	now := time.Now().UTC()
+	sourceID := fmt.Sprintf("log-%d", now.UnixNano())
+	feedback := TrainingFeedback{
+		FeedbackID: fmt.Sprintf("f-%d", now.UnixNano()),
+		UserID:     "u1",
+		SourceType: "log",
+		SourceID:   sourceID,
+		LogID:      sourceID,
+		Content:    "太累了",
+		CreatedAt:  now,
+	}
+	if err := store.CreateTrainingFeedback(context.Background(), feedback); err != nil {
+		t.Fatalf("create feedback failed: %v", err)
+	}
+	got, err := store.GetLatestTrainingFeedback(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("get latest feedback failed: %v", err)
+	}
+	if got.Content == "" {
+		t.Fatalf("expected content")
+	}
+}
