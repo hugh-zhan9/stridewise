@@ -99,6 +99,11 @@ type userProfileRequest struct {
 	GoalFrequency  int      `json:"goal_frequency"`
 	GoalPace       string   `json:"goal_pace"`
 	FitnessLevel   string   `json:"fitness_level"`
+	RunningYears   string   `json:"running_years"`
+	WeeklySessions string   `json:"weekly_sessions"`
+	WeeklyDistanceKM string `json:"weekly_distance_km"`
+	LongestRunKM   string   `json:"longest_run_km"`
+	RecentDiscomfort string `json:"recent_discomfort"`
 	LocationLat    *float64 `json:"location_lat"`
 	LocationLng    *float64 `json:"location_lng"`
 	Country        string   `json:"country"`
@@ -312,6 +317,11 @@ func NewHTTPServer(
 				GoalFrequency:  req.GoalFrequency,
 				GoalPace:       req.GoalPace,
 				FitnessLevel:   req.FitnessLevel,
+				RunningYears:   req.RunningYears,
+				WeeklySessions: req.WeeklySessions,
+				WeeklyDistanceKM: req.WeeklyDistanceKM,
+				LongestRunKM:   req.LongestRunKM,
+				RecentDiscomfort: req.RecentDiscomfort,
 				LocationLat:    *req.LocationLat,
 				LocationLng:    *req.LocationLng,
 				Country:        req.Country,
@@ -1062,7 +1072,34 @@ func validateUserProfileRequest(req userProfileRequest) error {
 	if req.FitnessLevel == "" {
 		return errBadRequest("fitness_level required")
 	}
+	if req.RunningYears == "" || req.WeeklySessions == "" || req.WeeklyDistanceKM == "" || req.LongestRunKM == "" || req.RecentDiscomfort == "" {
+		return errBadRequest("questionnaire required")
+	}
+	if !containsString(req.RunningYears, "0", "<1", "1-3", "3+") {
+		return errBadRequest("running_years invalid")
+	}
+	if !containsString(req.WeeklySessions, "0-1", "2-3", "4+") {
+		return errBadRequest("weekly_sessions invalid")
+	}
+	if !containsString(req.WeeklyDistanceKM, "0-5", "5-15", "15-30", "30+") {
+		return errBadRequest("weekly_distance_km invalid")
+	}
+	if !containsString(req.LongestRunKM, "0", "3", "5", "10", "21") {
+		return errBadRequest("longest_run_km invalid")
+	}
+	if !containsString(req.RecentDiscomfort, "yes", "no") {
+		return errBadRequest("recent_discomfort invalid")
+	}
 	return nil
+}
+
+func containsString(input string, choices ...string) bool {
+	for _, choice := range choices {
+		if input == choice {
+			return true
+		}
+	}
+	return false
 }
 
 func parseDate(input string) (time.Time, error) {
