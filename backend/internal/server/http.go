@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -98,7 +99,6 @@ type userProfileRequest struct {
 	GoalCycle      string   `json:"goal_cycle"`
 	GoalFrequency  int      `json:"goal_frequency"`
 	GoalPace       string   `json:"goal_pace"`
-	FitnessLevel   string   `json:"fitness_level"`
 	RunningYears   string   `json:"running_years"`
 	WeeklySessions string   `json:"weekly_sessions"`
 	WeeklyDistanceKM string `json:"weekly_distance_km"`
@@ -298,7 +298,25 @@ func NewHTTPServer(
 		switch r.Method {
 		case http.MethodPost:
 			var req userProfileRequest
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			var raw map[string]json.RawMessage
+			if err := json.Unmarshal(body, &raw); err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			if _, ok := raw["fitness_level"]; ok {
+				http.Error(w, "fitness_level not allowed", http.StatusBadRequest)
+				return
+			}
+			if _, ok := raw["ability_level"]; ok {
+				http.Error(w, "ability_level not allowed", http.StatusBadRequest)
+				return
+			}
+			if err := json.Unmarshal(body, &req); err != nil {
 				http.Error(w, "bad request", http.StatusBadRequest)
 				return
 			}
@@ -316,7 +334,7 @@ func NewHTTPServer(
 				GoalCycle:      req.GoalCycle,
 				GoalFrequency:  req.GoalFrequency,
 				GoalPace:       req.GoalPace,
-				FitnessLevel:   req.FitnessLevel,
+				FitnessLevel:   "unknown",
 				RunningYears:   req.RunningYears,
 				WeeklySessions: req.WeeklySessions,
 				WeeklyDistanceKM: req.WeeklyDistanceKM,
@@ -1068,9 +1086,6 @@ func validateUserProfileRequest(req userProfileRequest) error {
 	}
 	if req.GoalType == "" || req.GoalCycle == "" || req.GoalFrequency <= 0 || req.GoalPace == "" {
 		return errBadRequest("goal required")
-	}
-	if req.FitnessLevel == "" {
-		return errBadRequest("fitness_level required")
 	}
 	if req.RunningYears == "" || req.WeeklySessions == "" || req.WeeklyDistanceKM == "" || req.LongestRunKM == "" || req.RecentDiscomfort == "" {
 		return errBadRequest("questionnaire required")
