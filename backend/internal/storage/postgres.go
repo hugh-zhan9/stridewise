@@ -457,6 +457,15 @@ func (s *PostgresStore) UpdateAsyncJobStatus(ctx context.Context, jobID, status 
 	return nil
 }
 
+func (s *PostgresStore) UpdateAbilityLevel(ctx context.Context, userID, level, reason string, updatedAt time.Time) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE user_profiles
+		SET ability_level=$2, ability_level_reason=$3, ability_level_updated_at=$4, updated_at=NOW()
+		WHERE user_id=$1
+	`, userID, level, reason, updatedAt)
+	return err
+}
+
 func (s *PostgresStore) FindActiveAsyncJob(ctx context.Context, userID, jobType string) (AsyncJob, error) {
 	var job AsyncJob
 	err := s.pool.QueryRow(ctx, `

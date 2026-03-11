@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"stridewise/backend/internal/ai"
+	"stridewise/backend/internal/ability"
 	"stridewise/backend/internal/asyncjob"
 	"stridewise/backend/internal/baseline"
 	"stridewise/backend/internal/config"
@@ -72,6 +73,20 @@ func main() {
 	baselineProcessor.SetSummarizer(summarizer)
 	worker.SetBaselineProcessor(baselineProcessor)
 
+	var abilityLeveler ai.AbilityLeveler
+	if cfg.AI.Provider == "openai" {
+		abilityLeveler = ai.NewOpenAIAbilityLeveler(ai.OpenAIConfig{
+			APIKey:      cfg.AI.OpenAI.APIKey,
+			BaseURL:     cfg.AI.OpenAI.BaseURL,
+			Model:       cfg.AI.OpenAI.Model,
+			TimeoutMs:   cfg.AI.OpenAI.TimeoutMs,
+			MaxTokens:   cfg.AI.OpenAI.MaxTokens,
+			Temperature: cfg.AI.OpenAI.Temperature,
+		})
+	}
+	abilityProcessor := ability.NewProcessor(store, abilityLeveler)
+	worker.SetAbilityProcessor(abilityProcessor)
+
 	server := asynq.NewServer(
 		asynq.RedisClientOpt{Addr: cfg.Redis.Addr},
 		asynq.Config{Concurrency: cfg.Asynq.Concurrency},
@@ -81,6 +96,7 @@ func main() {
 	mux.HandleFunc(task.TypeSyncJob, worker.HandleSyncJob)
 	mux.HandleFunc(task.TypeTrainingRecalc, worker.HandleTrainingRecalc)
 	mux.HandleFunc(task.TypeBaselineRecalc, worker.HandleBaselineRecalc)
+	mux.HandleFunc(task.TypeAbilityLevelCalc, worker.HandleAbilityLevelCalc)
 
 	if err := server.Run(mux); err != nil {
 		log.Fatalf("worker run failed: %v", err)

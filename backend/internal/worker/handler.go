@@ -7,6 +7,7 @@ import (
 	"github.com/hibiken/asynq"
 
 	"stridewise/backend/internal/baseline"
+	"stridewise/backend/internal/ability"
 	"stridewise/backend/internal/sync"
 	"stridewise/backend/internal/task"
 	"stridewise/backend/internal/training"
@@ -15,6 +16,7 @@ import (
 var syncProcessor *sync.Processor
 var trainingProcessor *training.Processor
 var baselineProcessor *baseline.Processor
+var abilityProcessor *ability.Processor
 
 func SetSyncProcessor(p *sync.Processor) {
 	syncProcessor = p
@@ -26,6 +28,10 @@ func SetTrainingProcessor(p *training.Processor) {
 
 func SetBaselineProcessor(p *baseline.Processor) {
 	baselineProcessor = p
+}
+
+func SetAbilityProcessor(p *ability.Processor) {
+	abilityProcessor = p
 }
 
 func HandleSyncJob(ctx context.Context, t *asynq.Task) error {
@@ -63,4 +69,16 @@ func HandleBaselineRecalc(ctx context.Context, t *asynq.Task) error {
 	}
 	retryCount, _ := asynq.GetRetryCount(ctx)
 	return baselineProcessor.ProcessBaselineRecalc(ctx, p.JobID, p.UserID, p.TriggerType, p.TriggerRef, retryCount)
+}
+
+func HandleAbilityLevelCalc(ctx context.Context, t *asynq.Task) error {
+	if abilityProcessor == nil {
+		return errors.New("ability processor is not configured")
+	}
+	p, err := task.DecodeAbilityLevelPayload(t.Payload())
+	if err != nil {
+		return err
+	}
+	retryCount, _ := asynq.GetRetryCount(ctx)
+	return abilityProcessor.ProcessAbilityLevel(ctx, p.JobID, p.UserID, p.TriggerType, p.TriggerRef, retryCount)
 }
