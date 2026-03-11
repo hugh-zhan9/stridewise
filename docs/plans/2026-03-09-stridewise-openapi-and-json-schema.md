@@ -12,13 +12,15 @@
 - ~~当前版本：v1.7.0~~
 - ~~当前版本：v1.8.0~~
 - ~~当前版本：v1.9.0~~
-- 当前版本：v1.10.0
+- ~~当前版本：v1.10.0~~
+- 当前版本：v1.11.0
 - 发布日期：2026-03-11
 - 文档状态：可评审
 
 ## 变更记录
 | 版本号 | 日期 | 变更说明 |
 | --- | --- | --- |
+| v1.11.0 | 2026-03-11 | Profile 增加静息心率；Forecast 增加预测 AQI 字段与来源。 |
 | v1.10.0 | 2026-03-11 | AI 推荐输入新增 latest_training_feedback 字段。 |
 | v1.9.0 | 2026-03-11 | 内部接口响应统一包裹 Envelope，标准化错误与兜底元信息字段。 |
 | v1.8.0 | 2026-03-11 | 能力层级改为 AI 自动判定，Profile 响应新增能力层级元信息。 |
@@ -40,6 +42,8 @@
 
 ## 字段变更提示
 - ~~TrainingSummary.training_log_id / plan_match_score / completion_score / recovery_tip / summary_json~~ → 使用结构化字段并新增 `source_type/source_id`
+- ~~Profile 未包含 resting_hr~~ → ProfileInitRequest/ProfileResponse 增加 `resting_hr`（可选）
+- ~~Forecast 未包含 AQI~~ → RecommendationForecast 增加 `aqi`/`aqi_source`
 
 ## 1. OpenAPI 3.1（MVP 草案）
 - 当前阶段鉴权策略：
@@ -525,6 +529,7 @@ components:
         age: { type: integer, minimum: 10, maximum: 100 }
         height_cm: { type: number, minimum: 80, maximum: 250 }
         weight_kg: { type: number, minimum: 20, maximum: 300 }
+        resting_hr: { type: integer, minimum: 30, maximum: 120 }
         timezone: { type: string, example: Asia/Shanghai }
         default_location: { type: string, example: Shanghai }
         goal_type: { type: string, enum: [fat_loss, health_maintain, improve_5k] }
@@ -551,6 +556,7 @@ components:
         ability_level: { type: string, enum: [beginner, intermediate, advanced] }
         ability_level_reason: { type: string, nullable: true }
         ability_level_updated_at: { type: string, format: date-time, nullable: true }
+        resting_hr: { type: integer, nullable: true }
         timezone: { type: string }
         running_years: { type: string, enum: ["0", "<1", "1-3", "3+"] }
         weekly_sessions: { type: string, enum: ["0-1", "2-3", "4+"] }
@@ -804,7 +810,7 @@ components:
           "type": "array",
           "items": {
             "type": "object",
-            "required": ["date"],
+            "required": ["date", "aqi", "aqi_source"],
             "properties": {
               "date": { "type": "string", "format": "date" },
               "temp_max_c": { "type": ["number", "null"] },
@@ -815,6 +821,8 @@ components:
               "visibility_km": { "type": ["number", "null"] },
               "cloud_pct": { "type": ["number", "null"] },
               "uv_index": { "type": ["number", "null"] },
+              "aqi": { "type": "integer" },
+              "aqi_source": { "type": "string", "enum": ["local", "qaqi"] },
               "text_day": { "type": ["string", "null"] },
               "text_night": { "type": ["string", "null"] },
               "icon_day": { "type": ["string", "null"] },

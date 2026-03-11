@@ -5,13 +5,15 @@
 - ~~当前版本：v0.2.0~~
 - ~~当前版本：v0.3.0~~
 - ~~当前版本：v0.4.0~~
-- 当前版本：v0.5.0
+- ~~当前版本：v0.5.0~~
+- 当前版本：v0.6.0
 - 发布日期：2026-03-11
 - 文档状态：可评审
 
 ## 变更记录
 | 版本号 | 日期 | 变更说明 |
 | --- | --- | --- |
+| v0.6.0 | 2026-03-11 | 用户档案新增静息心率；预测 AQI 作为必需输入并落入天气预测模型。 |
 | v0.5.0 | 2026-03-11 | 能力层级改为 AI 自动判定，移除手动输入字段。 |
 | v0.4.0 | 2026-03-10 | ~~包含风寒/低温风险阈值~~ 移除冷风险（P0 不纳入），并调整降水仅触发黄色提示；引用最新来源修订参考说明。 |
 | v0.3.0 | 2026-03-10 | ~~P0 风险分级未给出数值阈值~~ 增补专业参考阈值（AQI/UV/热指数/风速/风寒）并注明降水概率为工程阈值。 |
@@ -47,7 +49,8 @@
 ### 4.1 UserProfile
 字段（位置必填）：
 - user_id
-- gender, age, height, weight
+- ~~gender, age, height, weight~~
+- gender, age, height, weight, resting_hr（可选）
 - goal_type, goal_cycle, goal_frequency, goal_pace
 - ~~fitness_level~~
 - ability_level（AI 自动判定）
@@ -68,6 +71,14 @@
 - risk_level（green/yellow/red）
 - created_at
 
+### 4.3 WeatherForecast（P0 预测输入）
+字段：
+- forecast_id, user_id, forecast_date
+- temp_max, temp_min, humidity, precip_mm, pressure_hpa, visibility_km, cloud_pct, uv_index
+- wind_*（风向/风速，昼夜）
+- sun/moon_*（日出日落/月相）
+- aqi_local, aqi_qaqi, aqi_source（本地 AQI 优先，缺失用 QAQI）
+
 ## 5. 核心流程
 
 ### 5.1 用户档案创建/更新
@@ -80,7 +91,11 @@
 2. 调用 Weather Provider（当前为 Mock）获取天气字段。
 3. 风险分级计算并写入 WeatherSnapshot。
 
-### 5.3 风险分级（P0 规则版）
+### 5.3 天气预测生成（含预测 AQI）
+1. 调用天气预报与空气质量预报并按日期合并。
+2. 若预测 AQI 缺失，按天气失败处理并触发保守建议。
+
+### 5.4 风险分级（P0 规则版）
 ~~- **红色**：任一条件触发：极端温度 / 高风 / 高降水 / 高 AQI / 高 UV~~
 ~~- **黄色**：中等风险阈值触发（降强度/缩时长）~~
 ~~- **绿色**：其余~~
@@ -125,7 +140,9 @@
 
 ## 6. Weather Provider 设计
 接口：
+- ~~`GetSnapshot(location)` -> `WeatherSnapshotInput`~~
 - `GetSnapshot(location)` -> `WeatherSnapshotInput`
+- `GetForecast(location)` -> `WeatherForecastInput[]`（含预测 AQI）
 
 实现：
 - `MockProvider`：用于当前阶段联调与测试。
