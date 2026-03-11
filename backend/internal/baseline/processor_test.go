@@ -153,3 +153,21 @@ func TestBaselineSyncGeneratesActivitySummaries(t *testing.T) {
 		t.Fatalf("expected activity summary created")
 	}
 }
+
+func TestProcessor_RecalcForTrigger(t *testing.T) {
+	now := time.Date(2026, 3, 10, 8, 0, 0, 0, time.UTC)
+	store := &fakeBaselineStore{
+		trainingLogs: []storage.TrainingLog{
+			{LogID: "log-1", UserID: "u1", StartTime: now.Add(-2 * time.Hour), DurationSec: 1800, DistanceKM: 5, RPE: 6, PaceSecPerKM: 360},
+		},
+	}
+	p := NewProcessor(store)
+	p.now = func() time.Time { return now }
+
+	if _, err := p.RecalcForTrigger(context.Background(), "u1", "training_update", "log-1"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !store.summaryUpdated {
+		t.Fatalf("expected summary updated")
+	}
+}

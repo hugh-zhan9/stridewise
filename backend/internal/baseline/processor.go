@@ -43,6 +43,10 @@ func (p *Processor) SetSummarizer(s ai.Summarizer) {
 	p.summarizer = s
 }
 
+func (p *Processor) RecalcForTrigger(ctx context.Context, userID, triggerType, triggerRef string) (error, error) {
+	return p.recalc(ctx, userID, triggerType, triggerRef)
+}
+
 func (p *Processor) ProcessBaselineRecalc(ctx context.Context, jobID, userID, triggerType, triggerRef string, retryCount int) error {
 	if p.store == nil {
 		return errors.New("baseline store is not configured")
