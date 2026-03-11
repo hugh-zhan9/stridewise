@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 
@@ -57,6 +58,39 @@ type WeatherSnapshot struct {
 	UVIndex           float64
 	RiskLevel         string
 	CreatedAt         time.Time
+}
+
+type WeatherForecast struct {
+	ForecastID       string
+	UserID           string
+	ForecastDate     time.Time
+	TempMaxC         *float64
+	TempMinC         *float64
+	Humidity         *float64
+	PrecipMM         *float64
+	PressureHPA      *float64
+	VisibilityKM     *float64
+	CloudPct         *float64
+	UVIndex          *float64
+	TextDay          *string
+	TextNight        *string
+	IconDay          *string
+	IconNight        *string
+	Wind360Day       *int
+	WindDirDay       *string
+	WindScaleDay     *string
+	WindSpeedDayMS   *float64
+	Wind360Night     *int
+	WindDirNight     *string
+	WindScaleNight   *string
+	WindSpeedNightMS *float64
+	SunriseTime      *time.Time
+	SunsetTime       *time.Time
+	MoonriseTime     *time.Time
+	MoonsetTime      *time.Time
+	MoonPhase        *string
+	MoonPhaseIcon    *string
+	CreatedAt        time.Time
 }
 
 type TrainingLog struct {
@@ -958,4 +992,171 @@ func (s *PostgresStore) GetLatestWeatherSnapshot(ctx context.Context, userID str
 		return WeatherSnapshot{}, err
 	}
 	return w, nil
+}
+
+func (s *PostgresStore) UpsertWeatherForecasts(ctx context.Context, forecasts []WeatherForecast) error {
+	if len(forecasts) == 0 {
+		return nil
+	}
+	for _, f := range forecasts {
+		_, err := s.pool.Exec(ctx, `
+			INSERT INTO weather_forecasts (
+				forecast_id, user_id, forecast_date,
+				temp_max_c, temp_min_c, humidity, precip_mm, pressure_hpa, visibility_km,
+				cloud_pct, uv_index, text_day, text_night, icon_day, icon_night,
+				wind360_day, wind_dir_day, wind_scale_day, wind_speed_day_ms,
+				wind360_night, wind_dir_night, wind_scale_night, wind_speed_night_ms,
+				sunrise_time, sunset_time, moonrise_time, moonset_time, moon_phase, moon_phase_icon,
+				created_at
+			) VALUES (
+				$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,NOW()
+			)
+			ON CONFLICT (user_id, forecast_date)
+			DO UPDATE SET
+				forecast_id=EXCLUDED.forecast_id,
+				temp_max_c=EXCLUDED.temp_max_c,
+				temp_min_c=EXCLUDED.temp_min_c,
+				humidity=EXCLUDED.humidity,
+				precip_mm=EXCLUDED.precip_mm,
+				pressure_hpa=EXCLUDED.pressure_hpa,
+				visibility_km=EXCLUDED.visibility_km,
+				cloud_pct=EXCLUDED.cloud_pct,
+				uv_index=EXCLUDED.uv_index,
+				text_day=EXCLUDED.text_day,
+				text_night=EXCLUDED.text_night,
+				icon_day=EXCLUDED.icon_day,
+				icon_night=EXCLUDED.icon_night,
+				wind360_day=EXCLUDED.wind360_day,
+				wind_dir_day=EXCLUDED.wind_dir_day,
+				wind_scale_day=EXCLUDED.wind_scale_day,
+				wind_speed_day_ms=EXCLUDED.wind_speed_day_ms,
+				wind360_night=EXCLUDED.wind360_night,
+				wind_dir_night=EXCLUDED.wind_dir_night,
+				wind_scale_night=EXCLUDED.wind_scale_night,
+				wind_speed_night_ms=EXCLUDED.wind_speed_night_ms,
+				sunrise_time=EXCLUDED.sunrise_time,
+				sunset_time=EXCLUDED.sunset_time,
+				moonrise_time=EXCLUDED.moonrise_time,
+				moonset_time=EXCLUDED.moonset_time,
+				moon_phase=EXCLUDED.moon_phase,
+				moon_phase_icon=EXCLUDED.moon_phase_icon
+		`, f.ForecastID, f.UserID, f.ForecastDate, f.TempMaxC, f.TempMinC, f.Humidity, f.PrecipMM, f.PressureHPA,
+			f.VisibilityKM, f.CloudPct, f.UVIndex, f.TextDay, f.TextNight, f.IconDay, f.IconNight,
+			f.Wind360Day, f.WindDirDay, f.WindScaleDay, f.WindSpeedDayMS,
+			f.Wind360Night, f.WindDirNight, f.WindScaleNight, f.WindSpeedNightMS,
+			f.SunriseTime, f.SunsetTime, f.MoonriseTime, f.MoonsetTime, f.MoonPhase, f.MoonPhaseIcon,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *PostgresStore) GetWeatherForecasts(ctx context.Context, userID string, from time.Time, to time.Time) ([]WeatherForecast, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT forecast_id, user_id, forecast_date,
+		       temp_max_c, temp_min_c, humidity, precip_mm, pressure_hpa, visibility_km,
+		       cloud_pct, uv_index, text_day, text_night, icon_day, icon_night,
+		       wind360_day, wind_dir_day, wind_scale_day, wind_speed_day_ms,
+		       wind360_night, wind_dir_night, wind_scale_night, wind_speed_night_ms,
+		       sunrise_time, sunset_time, moonrise_time, moonset_time, moon_phase, moon_phase_icon,
+		       created_at
+		FROM weather_forecasts
+		WHERE user_id=$1 AND forecast_date BETWEEN $2 AND $3
+		ORDER BY forecast_date ASC
+	`, userID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []WeatherForecast
+	for rows.Next() {
+		var f WeatherForecast
+		var tempMax, tempMin, humidity, precip, pressure, visibility, cloud, uv sql.NullFloat64
+		var textDay, textNight, iconDay, iconNight sql.NullString
+		var wind360Day, wind360Night sql.NullInt32
+		var windDirDay, windScaleDay, windDirNight, windScaleNight sql.NullString
+		var windSpeedDay, windSpeedNight sql.NullFloat64
+		var sunrise, sunset, moonrise, moonset sql.NullTime
+		var moonPhase, moonPhaseIcon sql.NullString
+
+		if err := rows.Scan(
+			&f.ForecastID, &f.UserID, &f.ForecastDate,
+			&tempMax, &tempMin, &humidity, &precip, &pressure, &visibility,
+			&cloud, &uv, &textDay, &textNight, &iconDay, &iconNight,
+			&wind360Day, &windDirDay, &windScaleDay, &windSpeedDay,
+			&wind360Night, &windDirNight, &windScaleNight, &windSpeedNight,
+			&sunrise, &sunset, &moonrise, &moonset, &moonPhase, &moonPhaseIcon,
+			&f.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+
+		f.TempMaxC = nullFloatPtr(tempMax)
+		f.TempMinC = nullFloatPtr(tempMin)
+		f.Humidity = nullFloatPtr(humidity)
+		f.PrecipMM = nullFloatPtr(precip)
+		f.PressureHPA = nullFloatPtr(pressure)
+		f.VisibilityKM = nullFloatPtr(visibility)
+		f.CloudPct = nullFloatPtr(cloud)
+		f.UVIndex = nullFloatPtr(uv)
+		f.TextDay = nullStringPtr(textDay)
+		f.TextNight = nullStringPtr(textNight)
+		f.IconDay = nullStringPtr(iconDay)
+		f.IconNight = nullStringPtr(iconNight)
+		f.Wind360Day = nullIntPtr(wind360Day)
+		f.WindDirDay = nullStringPtr(windDirDay)
+		f.WindScaleDay = nullStringPtr(windScaleDay)
+		f.WindSpeedDayMS = nullFloatPtr(windSpeedDay)
+		f.Wind360Night = nullIntPtr(wind360Night)
+		f.WindDirNight = nullStringPtr(windDirNight)
+		f.WindScaleNight = nullStringPtr(windScaleNight)
+		f.WindSpeedNightMS = nullFloatPtr(windSpeedNight)
+		f.SunriseTime = nullTimePtr(sunrise)
+		f.SunsetTime = nullTimePtr(sunset)
+		f.MoonriseTime = nullTimePtr(moonrise)
+		f.MoonsetTime = nullTimePtr(moonset)
+		f.MoonPhase = nullStringPtr(moonPhase)
+		f.MoonPhaseIcon = nullStringPtr(moonPhaseIcon)
+
+		out = append(out, f)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	return out, nil
+}
+
+func nullFloatPtr(v sql.NullFloat64) *float64 {
+	if !v.Valid {
+		return nil
+	}
+	val := v.Float64
+	return &val
+}
+
+func nullIntPtr(v sql.NullInt32) *int {
+	if !v.Valid {
+		return nil
+	}
+	val := int(v.Int32)
+	return &val
+}
+
+func nullStringPtr(v sql.NullString) *string {
+	if !v.Valid {
+		return nil
+	}
+	val := v.String
+	return &val
+}
+
+func nullTimePtr(v sql.NullTime) *time.Time {
+	if !v.Valid {
+		return nil
+	}
+	val := v.Time
+	return &val
 }
