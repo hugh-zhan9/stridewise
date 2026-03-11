@@ -91,31 +91,31 @@ func TestWeatherForecastStore(t *testing.T) {
 
 	forecasts := []WeatherForecast{
 		{
-			ForecastID:      "f1",
-			UserID:          "u1",
-			ForecastDate:    time.Date(2026, 3, 11, 0, 0, 0, 0, time.UTC),
-			TempMaxC:        &tempMax,
-			TempMinC:        &tempMin,
-			Humidity:        &humidity,
-			PrecipMM:        &precip,
-			PressureHPA:     &pressure,
-			VisibilityKM:    &visibility,
-			CloudPct:        &cloud,
-			UVIndex:         &uv,
-			TextDay:         &textDay,
-			TextNight:       &textNight,
-			IconDay:         &iconDay,
-			IconNight:       &iconNight,
-			Wind360Day:      &wind360Day,
-			WindDirDay:      &windDirDay,
-			WindScaleDay:    &windScaleDay,
-			WindSpeedDayMS:  &windSpeedDay,
-			Wind360Night:    &wind360Night,
-			WindDirNight:    &windDirNight,
-			WindScaleNight:  &windScaleNight,
+			ForecastID:       "f1",
+			UserID:           "u1",
+			ForecastDate:     time.Date(2026, 3, 11, 0, 0, 0, 0, time.UTC),
+			TempMaxC:         &tempMax,
+			TempMinC:         &tempMin,
+			Humidity:         &humidity,
+			PrecipMM:         &precip,
+			PressureHPA:      &pressure,
+			VisibilityKM:     &visibility,
+			CloudPct:         &cloud,
+			UVIndex:          &uv,
+			TextDay:          &textDay,
+			TextNight:        &textNight,
+			IconDay:          &iconDay,
+			IconNight:        &iconNight,
+			Wind360Day:       &wind360Day,
+			WindDirDay:       &windDirDay,
+			WindScaleDay:     &windScaleDay,
+			WindSpeedDayMS:   &windSpeedDay,
+			Wind360Night:     &wind360Night,
+			WindDirNight:     &windDirNight,
+			WindScaleNight:   &windScaleNight,
 			WindSpeedNightMS: &windSpeedNight,
-			SunriseTime:     &sunrise,
-			SunsetTime:      &sunset,
+			SunriseTime:      &sunrise,
+			SunsetTime:       &sunset,
 		},
 		{
 			ForecastID:   "f2",
@@ -139,5 +139,24 @@ func TestWeatherForecastStore(t *testing.T) {
 	}
 	if got[1].TempMaxC != nil {
 		t.Fatalf("expected nil temp_max for second forecast")
+	}
+}
+
+func TestWeatherForecastAQIColumns(t *testing.T) {
+	dsn := os.Getenv("STRIDEWISE_TEST_DSN")
+	if dsn == "" {
+		t.Skip("STRIDEWISE_TEST_DSN not set")
+	}
+	pool, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		t.Fatalf("connect failed: %v", err)
+	}
+	defer pool.Close()
+
+	var col string
+	err = pool.QueryRow(context.Background(),
+		"SELECT column_name FROM information_schema.columns WHERE table_name='weather_forecasts' AND column_name='aqi_local'").Scan(&col)
+	if err != nil || col != "aqi_local" {
+		t.Fatalf("aqi_local column missing")
 	}
 }

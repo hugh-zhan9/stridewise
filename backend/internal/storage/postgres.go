@@ -99,6 +99,9 @@ type WeatherForecast struct {
 	MoonsetTime      *time.Time
 	MoonPhase        *string
 	MoonPhaseIcon    *string
+	AQILocal         *int
+	AQIQAQI          *int
+	AQISource        *string
 	CreatedAt        time.Time
 }
 
@@ -1144,13 +1147,13 @@ func (s *PostgresStore) UpsertWeatherForecasts(ctx context.Context, forecasts []
 			INSERT INTO weather_forecasts (
 				forecast_id, user_id, forecast_date,
 				temp_max_c, temp_min_c, humidity, precip_mm, pressure_hpa, visibility_km,
-				cloud_pct, uv_index, text_day, text_night, icon_day, icon_night,
+				cloud_pct, uv_index, aqi_local, aqi_qaqi, aqi_source, text_day, text_night, icon_day, icon_night,
 				wind360_day, wind_dir_day, wind_scale_day, wind_speed_day_ms,
 				wind360_night, wind_dir_night, wind_scale_night, wind_speed_night_ms,
 				sunrise_time, sunset_time, moonrise_time, moonset_time, moon_phase, moon_phase_icon,
 				created_at
 			) VALUES (
-				$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,NOW()
+				$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,NOW()
 			)
 			ON CONFLICT (user_id, forecast_date)
 			DO UPDATE SET
@@ -1163,6 +1166,9 @@ func (s *PostgresStore) UpsertWeatherForecasts(ctx context.Context, forecasts []
 				visibility_km=EXCLUDED.visibility_km,
 				cloud_pct=EXCLUDED.cloud_pct,
 				uv_index=EXCLUDED.uv_index,
+				aqi_local=EXCLUDED.aqi_local,
+				aqi_qaqi=EXCLUDED.aqi_qaqi,
+				aqi_source=EXCLUDED.aqi_source,
 				text_day=EXCLUDED.text_day,
 				text_night=EXCLUDED.text_night,
 				icon_day=EXCLUDED.icon_day,
@@ -1182,7 +1188,7 @@ func (s *PostgresStore) UpsertWeatherForecasts(ctx context.Context, forecasts []
 				moon_phase=EXCLUDED.moon_phase,
 				moon_phase_icon=EXCLUDED.moon_phase_icon
 		`, f.ForecastID, f.UserID, f.ForecastDate, f.TempMaxC, f.TempMinC, f.Humidity, f.PrecipMM, f.PressureHPA,
-			f.VisibilityKM, f.CloudPct, f.UVIndex, f.TextDay, f.TextNight, f.IconDay, f.IconNight,
+			f.VisibilityKM, f.CloudPct, f.UVIndex, f.AQILocal, f.AQIQAQI, f.AQISource, f.TextDay, f.TextNight, f.IconDay, f.IconNight,
 			f.Wind360Day, f.WindDirDay, f.WindScaleDay, f.WindSpeedDayMS,
 			f.Wind360Night, f.WindDirNight, f.WindScaleNight, f.WindSpeedNightMS,
 			f.SunriseTime, f.SunsetTime, f.MoonriseTime, f.MoonsetTime, f.MoonPhase, f.MoonPhaseIcon,
@@ -1198,7 +1204,7 @@ func (s *PostgresStore) GetWeatherForecasts(ctx context.Context, userID string, 
 	rows, err := s.pool.Query(ctx, `
 		SELECT forecast_id, user_id, forecast_date,
 		       temp_max_c, temp_min_c, humidity, precip_mm, pressure_hpa, visibility_km,
-		       cloud_pct, uv_index, text_day, text_night, icon_day, icon_night,
+		       cloud_pct, uv_index, aqi_local, aqi_qaqi, aqi_source, text_day, text_night, icon_day, icon_night,
 		       wind360_day, wind_dir_day, wind_scale_day, wind_speed_day_ms,
 		       wind360_night, wind_dir_night, wind_scale_night, wind_speed_night_ms,
 		       sunrise_time, sunset_time, moonrise_time, moonset_time, moon_phase, moon_phase_icon,
@@ -1216,6 +1222,8 @@ func (s *PostgresStore) GetWeatherForecasts(ctx context.Context, userID string, 
 	for rows.Next() {
 		var f WeatherForecast
 		var tempMax, tempMin, humidity, precip, pressure, visibility, cloud, uv sql.NullFloat64
+		var aqiLocal, aqiQAQI sql.NullInt32
+		var aqiSource sql.NullString
 		var textDay, textNight, iconDay, iconNight sql.NullString
 		var wind360Day, wind360Night sql.NullInt32
 		var windDirDay, windScaleDay, windDirNight, windScaleNight sql.NullString
@@ -1226,7 +1234,7 @@ func (s *PostgresStore) GetWeatherForecasts(ctx context.Context, userID string, 
 		if err := rows.Scan(
 			&f.ForecastID, &f.UserID, &f.ForecastDate,
 			&tempMax, &tempMin, &humidity, &precip, &pressure, &visibility,
-			&cloud, &uv, &textDay, &textNight, &iconDay, &iconNight,
+			&cloud, &uv, &aqiLocal, &aqiQAQI, &aqiSource, &textDay, &textNight, &iconDay, &iconNight,
 			&wind360Day, &windDirDay, &windScaleDay, &windSpeedDay,
 			&wind360Night, &windDirNight, &windScaleNight, &windSpeedNight,
 			&sunrise, &sunset, &moonrise, &moonset, &moonPhase, &moonPhaseIcon,
@@ -1243,6 +1251,9 @@ func (s *PostgresStore) GetWeatherForecasts(ctx context.Context, userID string, 
 		f.VisibilityKM = nullFloatPtr(visibility)
 		f.CloudPct = nullFloatPtr(cloud)
 		f.UVIndex = nullFloatPtr(uv)
+		f.AQILocal = nullIntPtr(aqiLocal)
+		f.AQIQAQI = nullIntPtr(aqiQAQI)
+		f.AQISource = nullStringPtr(aqiSource)
 		f.TextDay = nullStringPtr(textDay)
 		f.TextNight = nullStringPtr(textNight)
 		f.IconDay = nullStringPtr(iconDay)
