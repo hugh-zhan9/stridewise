@@ -385,3 +385,17 @@
 - **Changed Files**:
 - (未检测到变更文件或当前目录非 git 仓库)
 ----------------------------------------
+## [2026-03-11 17:21] [Feature]
+- **Change**: 新增夜间基线补跑与执行记录
+- **Risk Analysis**: 夜间调度与补跑可能增加队列负载；补跑逻辑依赖运行记录表，若记录写入失败可能重复触发
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/cmd/worker/main.go`
+- `backend/internal/storage/postgres.go`
+- `backend/internal/storage/postgres_baseline_test.go`
+- `backend/cmd/worker/main_test.go`
+- `backend/cmd/worker/nightly_scheduler.go`
+- `backend/internal/baseline/nightly.go`
+- `backend/internal/baseline/nightly_test.go`
+- `backend/migrations/009_nightly_baseline_runs.sql`
+----------------------------------------

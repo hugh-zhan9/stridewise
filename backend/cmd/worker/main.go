@@ -4,12 +4,13 @@ import (
 	"context"
 	"flag"
 	"log"
+	"time"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"stridewise/backend/internal/ai"
 	"stridewise/backend/internal/ability"
+	"stridewise/backend/internal/ai"
 	"stridewise/backend/internal/asyncjob"
 	"stridewise/backend/internal/baseline"
 	"stridewise/backend/internal/config"
@@ -45,6 +46,7 @@ func main() {
 	store := storage.NewPostgresStore(pool)
 	asynqClient := asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.Redis.Addr})
 	defer asynqClient.Close()
+	baselineEnqueuer := asyncjob.NewBaselineEnqueuer(store, asynqClient)
 	processor := syncjob.NewProcessor(store, map[string]syncjob.Connector{
 		"keep":   keepconnector.NewLive(cfg.Keep.PhoneNumber, cfg.Keep.Password, "", nil),
 		"strava": stravaconnector.New(cfg.Strava.DataFile),
@@ -54,7 +56,7 @@ func main() {
 		"tcx":    tcxconnector.New(cfg.TCX.DataFile),
 		"fit":    fitconnector.New(cfg.FIT.DataFile),
 	})
-	processor.SetBaselineEnqueuer(asyncjob.NewBaselineEnqueuer(store, asynqClient))
+	processor.SetBaselineEnqueuer(baselineEnqueuer)
 	processor.SetAbilityEnqueuer(asyncjob.NewAbilityLevelEnqueuer(store, asynqClient))
 	worker.SetSyncProcessor(processor)
 	worker.SetTrainingProcessor(training.NewProcessor(store))
@@ -87,6 +89,8 @@ func main() {
 	}
 	abilityProcessor := ability.NewProcessor(store, abilityLeveler)
 	worker.SetAbilityProcessor(abilityProcessor)
+
+	go runNightlyScheduler(context.Background(), store, baselineEnqueuer, time.Now)
 
 	server := asynq.NewServer(
 		asynq.RedisClientOpt{Addr: cfg.Redis.Addr},

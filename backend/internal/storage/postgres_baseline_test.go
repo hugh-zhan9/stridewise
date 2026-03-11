@@ -160,3 +160,69 @@ func TestGetLatestTrainingFeedback(t *testing.T) {
 		t.Fatalf("expected content")
 	}
 }
+
+func TestListActiveUsersSince(t *testing.T) {
+	dsn := os.Getenv("STRIDEWISE_TEST_DSN")
+	if dsn == "" {
+		t.Skip("STRIDEWISE_TEST_DSN not set")
+	}
+	pool, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		t.Fatalf("connect failed: %v", err)
+	}
+	defer pool.Close()
+
+	store := NewPostgresStore(pool)
+	now := time.Now().UTC()
+	logID := fmt.Sprintf("log-%d", now.UnixNano())
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO training_logs (log_id, user_id, source, training_type, start_time, duration_sec, distance_km, pace_str, pace_sec_per_km, rpe, discomfort, created_at, updated_at)
+		VALUES ($1,'u1','manual','easy',NOW(),1800,5,'05''30''',330,5,false,NOW(),NOW())
+	`, logID); err != nil {
+		t.Fatalf("insert training log failed: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), `
+		INSERT INTO activities (user_id, source, source_activity_id, name, distance_m, moving_time_sec, start_time_utc, start_time_local, timezone)
+		VALUES ('u2','keep','a1','run',5000,1500,NOW(),NOW(),'UTC')
+	`); err != nil {
+		t.Fatalf("insert activity failed: %v", err)
+	}
+
+	users, err := store.ListActiveUsersSince(context.Background(), now.Add(-28*24*time.Hour))
+	if err != nil {
+		t.Fatalf("list active users failed: %v", err)
+	}
+	if len(users) == 0 {
+		t.Fatalf("expected users")
+	}
+}
+
+func TestNightlyBaselineRunStore(t *testing.T) {
+	dsn := os.Getenv("STRIDEWISE_TEST_DSN")
+	if dsn == "" {
+		t.Skip("STRIDEWISE_TEST_DSN not set")
+	}
+	pool, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		t.Fatalf("connect failed: %v", err)
+	}
+	defer pool.Close()
+
+	store := NewPostgresStore(pool)
+	now := time.Now().UTC()
+	run := NightlyBaselineRun{
+		RunDate:   time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()),
+		Status:    "running",
+		StartedAt: &now,
+	}
+	if err := store.UpsertNightlyBaselineRun(context.Background(), run); err != nil {
+		t.Fatalf("upsert run failed: %v", err)
+	}
+	got, err := store.GetNightlyBaselineRun(context.Background(), run.RunDate)
+	if err != nil {
+		t.Fatalf("get run failed: %v", err)
+	}
+	if got.Status != "running" {
+		t.Fatalf("unexpected status: %s", got.Status)
+	}
+}

@@ -200,6 +200,16 @@ type BaselineHistory struct {
 	Status              string
 }
 
+type NightlyBaselineRun struct {
+	RunDate      time.Time
+	Status       string
+	ErrorMessage string
+	StartedAt    *time.Time
+	CompletedAt  *time.Time
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
 type TrainingSummary struct {
 	SummaryID        string
 	UserID           string
@@ -582,6 +592,38 @@ func (s *PostgresStore) GetBaselineCurrent(ctx context.Context, userID string) (
 	return b, nil
 }
 
+func (s *PostgresStore) GetNightlyBaselineRun(ctx context.Context, runDate time.Time) (NightlyBaselineRun, error) {
+	var out NightlyBaselineRun
+	err := s.pool.QueryRow(ctx, `
+		SELECT run_date, status, error_message, started_at, completed_at, created_at, updated_at
+		FROM nightly_baseline_runs
+		WHERE run_date=$1
+	`, runDate).Scan(
+		&out.RunDate, &out.Status, &out.ErrorMessage, &out.StartedAt, &out.CompletedAt, &out.CreatedAt, &out.UpdatedAt,
+	)
+	if err != nil {
+		return NightlyBaselineRun{}, err
+	}
+	return out, nil
+}
+
+func (s *PostgresStore) UpsertNightlyBaselineRun(ctx context.Context, run NightlyBaselineRun) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO nightly_baseline_runs (
+			run_date, status, error_message, started_at, completed_at, created_at, updated_at
+		)
+		VALUES ($1,$2,$3,$4,$5,NOW(),NOW())
+		ON CONFLICT (run_date)
+		DO UPDATE SET
+			status=EXCLUDED.status,
+			error_message=EXCLUDED.error_message,
+			started_at=EXCLUDED.started_at,
+			completed_at=EXCLUDED.completed_at,
+			updated_at=NOW()
+	`, run.RunDate, run.Status, run.ErrorMessage, run.StartedAt, run.CompletedAt)
+	return err
+}
+
 func (s *PostgresStore) UpsertTrainingSummary(ctx context.Context, summary TrainingSummary) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO training_summaries (
@@ -931,6 +973,38 @@ func (s *PostgresStore) GetLatestTrainingDiscomfort(ctx context.Context, userID 
 		return false, err
 	}
 	return discomfort, nil
+}
+
+func (s *PostgresStore) ListActiveUsersSince(ctx context.Context, since time.Time) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT user_id
+		FROM (
+			SELECT user_id
+			FROM training_logs
+			WHERE deleted_at IS NULL AND start_time >= $1
+			UNION
+			SELECT user_id
+			FROM activities
+			WHERE start_time_local >= $1
+		) AS active_users
+	`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []string
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		users = append(users, userID)
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	return users, nil
 }
 
 func (s *PostgresStore) UpsertUserProfile(ctx context.Context, p UserProfile) error {
