@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -63,6 +65,9 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 	baseline, err := p.store.GetBaselineCurrent(ctx, userID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return storage.Recommendation{}, err
+	}
+	if baseline.Status == "" && baseline.DataSessions7d < 3 {
+		baseline.Status = "insufficient_data"
 	}
 
 	now := p.now()
@@ -133,6 +138,10 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 	}
 
 	output, isFallback := p.callAI(ctx, input, weatherErr)
+	if baseline.Status == "insufficient_data" || baseline.DataSessions7d < 3 {
+		output = conservativeOutput(profile)
+		isFallback = true
+	}
 	ruleResult := ApplyRules(RuleInput{
 		WeatherRisk:   string(weatherRisk),
 		HasDiscomfort: hasDiscomfort,
@@ -222,6 +231,53 @@ func formatTimePtr(input *time.Time) *string {
 	}
 	val := input.Format("15:04:05")
 	return &val
+}
+
+func conservativeOutput(profile storage.UserProfile) RecommendationOutput {
+	volume := conservativeTargetVolume(profile.WeeklyDistanceKM)
+	shouldRun := true
+	riskLevel := "green"
+	if strings.ToLower(profile.RecentDiscomfort) == "yes" {
+		shouldRun = false
+		riskLevel = "red"
+	}
+	return RecommendationOutput{
+		ShouldRun:           shouldRun,
+		WorkoutType:         "easy_run",
+		IntensityRange:      "低强度",
+		TargetVolume:        volume,
+		SuggestedTimeWindow: "any",
+		RiskLevel:           riskLevel,
+		HydrationTip:        "",
+		ClothingTip:         "",
+		Explanation:         []string{"问卷默认保守模板：当前训练数据不足，建议以低风险方式开始。"},
+		AlternativeWorkouts: []AlternativeWorkout{},
+	}
+}
+
+func conservativeTargetVolume(weeklyDistance string) string {
+	min := weeklyDistanceLowerBound(weeklyDistance)
+	if min <= 0 {
+		return "0 km"
+	}
+	minTarget := min * 0.2
+	maxTarget := min * 0.3
+	return fmt.Sprintf("%.1f-%.1f km", minTarget, maxTarget)
+}
+
+func weeklyDistanceLowerBound(value string) float64 {
+	switch value {
+	case "0-5":
+		return 0
+	case "5-15":
+		return 5
+	case "15-30":
+		return 15
+	case "30+":
+		return 30
+	default:
+		return 0
+	}
 }
 
 func (p *Processor) GetLatest(ctx context.Context, userID string) (storage.Recommendation, error) {

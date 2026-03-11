@@ -3,6 +3,7 @@ package recommendation
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +15,10 @@ import (
 type fakeStore struct {
 	created bool
 	lastRec storage.Recommendation
+	profile storage.UserProfile
+	baseline storage.BaselineCurrent
+	loadSummary storage.TrainingLoadSummary
+	hasDiscomfort bool
 }
 
 func (f *fakeStore) CreateRecommendation(_ context.Context, rec storage.Recommendation) error {
@@ -27,10 +32,16 @@ func (f *fakeStore) GetLatestRecommendation(_ context.Context, _ string) (storag
 }
 
 func (f *fakeStore) GetUserProfile(_ context.Context, _ string) (storage.UserProfile, error) {
+	if f.profile.UserID != "" {
+		return f.profile, nil
+	}
 	return storage.UserProfile{UserID: "u1", LocationLat: 1, LocationLng: 2, Country: "CN", Province: "SH", City: "SH"}, nil
 }
 
 func (f *fakeStore) GetBaselineCurrent(_ context.Context, _ string) (storage.BaselineCurrent, error) {
+	if f.baseline.UserID != "" {
+		return f.baseline, nil
+	}
 	return storage.BaselineCurrent{
 		UserID:          "u1",
 		ACWRSRPE:        1.6,
@@ -49,11 +60,14 @@ func (f *fakeStore) UpsertWeatherForecasts(_ context.Context, _ []storage.Weathe
 }
 
 func (f *fakeStore) GetRecentTrainingSummary(_ context.Context, _ string, _ time.Time, _ time.Time) (storage.TrainingLoadSummary, error) {
+	if f.loadSummary.Sessions != 0 || f.loadSummary.Distance != 0 || f.loadSummary.Duration != 0 {
+		return f.loadSummary, nil
+	}
 	return storage.TrainingLoadSummary{Sessions: 3, Distance: 10, Duration: 3600}, nil
 }
 
 func (f *fakeStore) GetLatestTrainingDiscomfort(_ context.Context, _ string) (bool, error) {
-	return false, nil
+	return f.hasDiscomfort, nil
 }
 
 func (f *fakeStore) CreateRecommendationFeedback(_ context.Context, _ storage.RecommendationFeedback) error {
@@ -96,6 +110,24 @@ func (fakeWeather) GetForecast(_ context.Context, _ weather.Location) ([]weather
 	}}, nil
 }
 
+type safeWeather struct{}
+
+func (safeWeather) GetSnapshot(_ context.Context, _ weather.Location) (weather.SnapshotInput, error) {
+	return weather.SnapshotInput{
+		TemperatureC:      20,
+		FeelsLikeC:        20,
+		Humidity:          0.5,
+		WindSpeedMS:       1,
+		PrecipitationProb: 0,
+		AQI:               50,
+		UVIndex:           1,
+	}, nil
+}
+
+func (safeWeather) GetForecast(_ context.Context, _ weather.Location) ([]weather.ForecastInput, error) {
+	return nil, nil
+}
+
 func TestGenerateRecommendation(t *testing.T) {
 	store := &fakeStore{}
 	p := NewProcessor(store, fakeWeather{}, fakeAI{})
@@ -124,5 +156,95 @@ func TestGenerateRecommendation(t *testing.T) {
 	}
 	if _, ok := output["AlternativeWorkouts"]; !ok {
 		t.Fatalf("expected AlternativeWorkouts in output")
+	}
+}
+
+func TestGenerateRecommendation_ConservativeTemplate(t *testing.T) {
+	store := &fakeStore{
+		profile: storage.UserProfile{
+			UserID: "u1",
+			LocationLat: 1,
+			LocationLng: 2,
+			Country: "CN",
+			Province: "SH",
+			City: "SH",
+			RunningYears: "1-3",
+			WeeklySessions: "2-3",
+			WeeklyDistanceKM: "5-15",
+			LongestRunKM: "10",
+			RecentDiscomfort: "no",
+		},
+		baseline: storage.BaselineCurrent{
+			UserID: "u1",
+			Status: "insufficient_data",
+			DataSessions7d: 0,
+		},
+		loadSummary: storage.TrainingLoadSummary{Sessions: 0},
+	}
+	p := NewProcessor(store, safeWeather{}, fakeAI{})
+	p.now = func() time.Time { return time.Date(2026, 3, 10, 9, 0, 0, 0, time.UTC) }
+	if _, err := p.Generate(context.Background(), "u1"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	var output RecommendationOutput
+	if err := json.Unmarshal(store.lastRec.OutputJSON, &output); err != nil {
+		t.Fatalf("unmarshal output: %v", err)
+	}
+	if output.WorkoutType != "easy_run" {
+		t.Fatalf("expected workout_type easy_run, got %s", output.WorkoutType)
+	}
+	if len(output.Explanation) == 0 || output.Explanation[0] == "" {
+		t.Fatalf("expected explanation for conservative template")
+	}
+	found := false
+	for _, line := range output.Explanation {
+		if strings.Contains(line, "保守模板") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected explanation contains 保守模板")
+	}
+}
+
+func TestGenerateRecommendation_ConservativeTemplateDiscomfort(t *testing.T) {
+	store := &fakeStore{
+		profile: storage.UserProfile{
+			UserID: "u1",
+			LocationLat: 1,
+			LocationLng: 2,
+			Country: "CN",
+			Province: "SH",
+			City: "SH",
+			RunningYears: "1-3",
+			WeeklySessions: "2-3",
+			WeeklyDistanceKM: "5-15",
+			LongestRunKM: "10",
+			RecentDiscomfort: "yes",
+		},
+		baseline: storage.BaselineCurrent{
+			UserID: "u1",
+			Status: "insufficient_data",
+			DataSessions7d: 0,
+		},
+		loadSummary: storage.TrainingLoadSummary{Sessions: 0},
+	}
+	p := NewProcessor(store, fakeWeather{}, fakeAI{})
+	p.now = func() time.Time { return time.Date(2026, 3, 10, 9, 0, 0, 0, time.UTC) }
+	if _, err := p.Generate(context.Background(), "u1"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	var output RecommendationOutput
+	if err := json.Unmarshal(store.lastRec.OutputJSON, &output); err != nil {
+		t.Fatalf("unmarshal output: %v", err)
+	}
+	if output.ShouldRun {
+		t.Fatalf("expected should_run false when recent_discomfort yes")
+	}
+	if output.RiskLevel != "red" {
+		t.Fatalf("expected risk_level red, got %s", output.RiskLevel)
 	}
 }
