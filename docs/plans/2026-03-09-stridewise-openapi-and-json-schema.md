@@ -11,13 +11,15 @@
 - ~~当前版本：v1.6.0~~
 - ~~当前版本：v1.7.0~~
 - ~~当前版本：v1.8.0~~
-- 当前版本：v1.9.0
+- ~~当前版本：v1.9.0~~
+- 当前版本：v1.10.0
 - 发布日期：2026-03-11
 - 文档状态：可评审
 
 ## 变更记录
 | 版本号 | 日期 | 变更说明 |
 | --- | --- | --- |
+| v1.10.0 | 2026-03-11 | AI 推荐输入新增 latest_training_feedback 字段。 |
 | v1.9.0 | 2026-03-11 | 内部接口响应统一包裹 Envelope，标准化错误与兜底元信息字段。 |
 | v1.8.0 | 2026-03-11 | 能力层级改为 AI 自动判定，Profile 响应新增能力层级元信息。 |
 | v1.7.0 | 2026-03-11 | 用户问卷字段落库，Profile schema 增加问卷字段。 |
@@ -869,6 +871,30 @@ components:
           "items": { "type": "string" }
         },
         "max_training_minutes": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "latest_training_feedback": {
+      "type": "object",
+      "required": ["source_type", "source_id", "content", "summary"],
+      "properties": {
+        "source_type": { "type": "string", "enum": ["log", "activity"] },
+        "source_id": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "content": { "type": "string" },
+        "summary": {
+          "type": "object",
+          "required": ["completion_rate", "intensity_match", "recovery_advice", "anomaly_notes", "performance_notes", "next_suggestion"],
+          "properties": {
+            "completion_rate": { "type": "string" },
+            "intensity_match": { "type": "string" },
+            "recovery_advice": { "type": "string" },
+            "anomaly_notes": { "type": "string" },
+            "performance_notes": { "type": "string" },
+            "next_suggestion": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },
