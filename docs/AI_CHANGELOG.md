@@ -423,3 +423,10 @@
 - `backend/internal/recommendation/processor_test.go`
 - `.idea/`
 ----------------------------------------
+## [2026-03-11 18:47] [Refactor]
+- **Change**: 忽略IDE配置目录
+- **Risk Analysis**: 仅更新.gitignore，风险极低。
+- **Risk Level**: S3（低级: 轻微行为偏差或日志/可观测性影响）
+- **Changed Files**:
+- `.gitignore`
+----------------------------------------

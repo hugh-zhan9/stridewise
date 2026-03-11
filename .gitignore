@@ -1,4 +1,5 @@
 .DS_Store
+.idea/
 running_page/
 backend/bin/
 backend/.env
