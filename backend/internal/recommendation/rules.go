@@ -25,6 +25,13 @@ func ApplyRules(input RuleInput, output RecommendationOutput) RuleResult {
 		if output.WorkoutType == "" {
 			output.WorkoutType = "rest"
 		}
+		if len(output.AlternativeWorkouts) == 0 {
+			output.AlternativeWorkouts = []AlternativeWorkout{
+				{Type: "treadmill", Title: "室内跑步机轻松跑", DurationMin: 30, Intensity: "low"},
+				{Type: "strength", Title: "基础力量训练", DurationMin: 20, Intensity: "low"},
+				{Type: "mobility", Title: "拉伸与灵活性恢复", DurationMin: 15, Intensity: "low"},
+			}
+		}
 		if output.RiskLevel == "" {
 			output.RiskLevel = "red"
 		}
