@@ -301,3 +301,28 @@
 - `backend/internal/server/http.go`
 - `backend/internal/server/http_baseline_test.go`
 ----------------------------------------
+## [2026-03-11 14:00] [Feature]
+- **Change**: 用户档案新增问卷字段与存储写入
+- **Risk Analysis**: 新增字段依赖迁移与SQL列顺序，若线上已执行旧迁移可能出现字段缺失或默认值不符合预期；当前存储测试依赖外部DSN未执行。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/migrations/003_user_weather.sql`
+- `backend/internal/storage/postgres.go`
+- `backend/internal/storage/postgres_user_weather_test.go`
+----------------------------------------
+## [2026-03-11 14:02] [Feature]
+- **Change**: 用户档案接口支持问卷字段校验与写入
+- **Risk Analysis**: 新增字段校验较严格，若已有存量用户未补齐问卷可能出现400；需确认调用方已更新。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/server/http.go`
+- `backend/internal/server/http_user_weather_test.go`
+----------------------------------------
+## [2026-03-11 14:08] [Feature]
+- **Change**: 训练数据不足时输出保守模板
+- **Risk Analysis**: 保守模板绕过AI，若触发条件过宽可能导致建议过于保守；目标量计算对 0-5 分段返回 0km 需要产品确认。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/recommendation/processor.go`
+- `backend/internal/recommendation/processor_test.go`
+----------------------------------------
