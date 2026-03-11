@@ -122,7 +122,79 @@ git commit -m "新增夜间基线重算入口"
 
 ---
 
-### Task 3: Worker 定时触发（TDD）
+### Task 3: 夜间执行记录（TDD）
+
+**Files:**
+- Create: `backend/migrations/009_nightly_baseline_runs.sql`
+- Modify: `backend/internal/storage/postgres.go`
+- Test: `backend/internal/storage/postgres_baseline_test.go`
+
+**Step 1: Write the failing test**
+
+在 `postgres_baseline_test.go` 新增：
+
+```go
+func TestNightlyBaselineRunStore(t *testing.T) {
+    dsn := os.Getenv("STRIDEWISE_TEST_DSN")
+    if dsn == "" {
+        t.Skip("STRIDEWISE_TEST_DSN not set")
+    }
+    pool, err := pgxpool.New(context.Background(), dsn)
+    if err != nil {
+        t.Fatalf("connect failed: %v", err)
+    }
+    defer pool.Close()
+
+    store := NewPostgresStore(pool)
+    now := time.Now().UTC()
+    run := NightlyBaselineRun{
+        RunDate:   time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()),
+        Status:    "running",
+        StartedAt: &now,
+    }
+    if err := store.UpsertNightlyBaselineRun(context.Background(), run); err != nil {
+        t.Fatalf("upsert run failed: %v", err)
+    }
+    got, err := store.GetNightlyBaselineRun(context.Background(), run.RunDate)
+    if err != nil {
+        t.Fatalf("get run failed: %v", err)
+    }
+    if got.Status != "running" {
+        t.Fatalf("unexpected status: %s", got.Status)
+    }
+}
+```
+
+**Step 2: Run test to verify it fails**
+
+Run: `go test ./backend/internal/storage -v`  
+Expected: FAIL（方法/类型不存在或表缺失）
+
+**Step 3: Write minimal implementation**
+
+- 新增迁移 `009_nightly_baseline_runs.sql`：
+  - `run_date DATE PRIMARY KEY`
+  - `status TEXT NOT NULL`
+  - `error_message TEXT NOT NULL DEFAULT ''`
+  - `started_at / completed_at / created_at / updated_at`
+- `PostgresStore.UpsertNightlyBaselineRun`
+- `PostgresStore.GetNightlyBaselineRun`
+
+**Step 4: Run test to verify it passes**
+
+Run: `go test ./backend/internal/storage -v`
+
+**Step 5: Commit**
+
+```bash
+git add backend/migrations/009_nightly_baseline_runs.sql backend/internal/storage/postgres.go backend/internal/storage/postgres_baseline_test.go
+
+git commit -m "新增夜间基线执行记录表与存储"
+```
+
+---
+
+### Task 4: Worker 定时触发（含补跑）（TDD）
 
 **Files:**
 - Modify: `backend/cmd/worker/main.go`
@@ -136,6 +208,22 @@ func TestNextNightlyDelay(t *testing.T) {
     d := nextNightlyDelay(now)
     if d <= 0 { t.Fatalf("expected positive delay") }
 }
+
+func TestRunNightlyIfNeeded_Catchup(t *testing.T) {
+    now := time.Date(2026, 3, 11, 3, 0, 0, 0, time.Local)
+    store := &nightlyRunStoreStub{runErr: pgx.ErrNoRows, users: []string{"u1"}}
+    enq := &nightlyEnqueuerStub{}
+    runNightlyIfNeeded(context.Background(), store, enq, func() time.Time { return now })
+    if enq.calls != 1 {
+        t.Fatalf("expected enqueue on catchup")
+    }
+    if len(store.upserts) < 2 {
+        t.Fatalf("expected run status upserts")
+    }
+    if store.upserts[len(store.upserts)-1].Status != "success" {
+        t.Fatalf("expected success status")
+    }
+}
 ```
 
 **Step 2: Run test to verify it fails**
@@ -147,8 +235,10 @@ Expected: FAIL（函数不存在）
 
 - 增加 `nextNightlyDelay(now time.Time) time.Duration`
   - 计算下一个本地 02:00 的时间差
+- 增加 `runNightlyIfNeeded(...)`：02:00 后若当天未执行则补跑
 - `main` 中启动 goroutine：
-  - `for { time.Sleep(nextNightlyDelay(time.Now())); baseline.RunNightlyBaselineRecalc(...) }`
+  - 启动时先调用 `runNightlyIfNeeded`
+  - `for { time.Sleep(nextNightlyDelay(time.Now())); runNightlyIfNeeded(...) }`
 
 **Step 4: Run test to verify it passes**
 
@@ -159,12 +249,12 @@ Run: `go test ./backend/cmd/worker -v`
 ```bash
 git add backend/cmd/worker/main.go backend/cmd/worker/main_test.go
 
-git commit -m "worker 增加夜间基线调度"
+git commit -m "worker 增加夜间基线补跑调度"
 ```
 
 ---
 
-### Task 4: 全量回归与飞行记录
+### Task 5: 全量回归与飞行记录
 
 **Step 1: Run full tests**
 
