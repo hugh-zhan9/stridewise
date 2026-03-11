@@ -721,37 +721,53 @@ components:
     },
     "weather": {
       "type": "object",
-      "required": ["today", "next_3_days", "risk_level"],
+      "required": ["temperature_c", "feels_like_c", "humidity", "wind_speed_ms", "precipitation_prob", "aqi", "uv_index", "risk_level", "forecasts"],
       "properties": {
-        "today": {
-          "type": "object",
-          "required": ["temp", "feels_like", "humidity", "wind_speed", "precipitation_prob", "aqi", "uv_index"],
-          "properties": {
-            "temp": { "type": "number" },
-            "feels_like": { "type": "number" },
-            "humidity": { "type": "number" },
-            "wind_speed": { "type": "number" },
-            "precipitation_prob": { "type": "number" },
-            "aqi": { "type": "number" },
-            "uv_index": { "type": "number" }
-          },
-          "additionalProperties": false
-        },
-        "next_3_days": {
+        "temperature_c": { "type": "number" },
+        "feels_like_c": { "type": "number" },
+        "humidity": { "type": "number" },
+        "wind_speed_ms": { "type": "number" },
+        "precipitation_prob": { "type": "number" },
+        "aqi": { "type": "number" },
+        "uv_index": { "type": "number" },
+        "risk_level": { "type": "string" },
+        "forecasts": {
           "type": "array",
-          "minItems": 3,
-          "maxItems": 3,
           "items": {
             "type": "object",
-            "required": ["date", "risk_level"],
+            "required": ["date"],
             "properties": {
               "date": { "type": "string", "format": "date" },
-              "risk_level": { "type": "string", "enum": ["green", "yellow", "red"] }
+              "temp_max_c": { "type": ["number", "null"] },
+              "temp_min_c": { "type": ["number", "null"] },
+              "humidity": { "type": ["number", "null"] },
+              "precip_mm": { "type": ["number", "null"] },
+              "pressure_hpa": { "type": ["number", "null"] },
+              "visibility_km": { "type": ["number", "null"] },
+              "cloud_pct": { "type": ["number", "null"] },
+              "uv_index": { "type": ["number", "null"] },
+              "text_day": { "type": ["string", "null"] },
+              "text_night": { "type": ["string", "null"] },
+              "icon_day": { "type": ["string", "null"] },
+              "icon_night": { "type": ["string", "null"] },
+              "wind360_day": { "type": ["integer", "null"] },
+              "wind_dir_day": { "type": ["string", "null"] },
+              "wind_scale_day": { "type": ["string", "null"] },
+              "wind_speed_day_ms": { "type": ["number", "null"] },
+              "wind360_night": { "type": ["integer", "null"] },
+              "wind_dir_night": { "type": ["string", "null"] },
+              "wind_scale_night": { "type": ["string", "null"] },
+              "wind_speed_night_ms": { "type": ["number", "null"] },
+              "sunrise_time": { "type": ["string", "null"], "format": "time" },
+              "sunset_time": { "type": ["string", "null"], "format": "time" },
+              "moonrise_time": { "type": ["string", "null"], "format": "time" },
+              "moonset_time": { "type": ["string", "null"], "format": "time" },
+              "moon_phase": { "type": ["string", "null"] },
+              "moon_phase_icon": { "type": ["string", "null"] }
             },
-            "additionalProperties": true
+            "additionalProperties": false
           }
-        },
-        "risk_level": { "type": "string", "enum": ["green", "yellow", "red"] }
+        }
       },
       "additionalProperties": false
     },
