@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"stridewise/backend/internal/task"
 )
 
 func TestTrainingLogCRUD(t *testing.T) {
@@ -142,5 +143,38 @@ func TestGetTrainingLog(t *testing.T) {
 	}
 	if got.LogID != log.LogID {
 		t.Fatalf("unexpected log id")
+	}
+}
+
+func TestFindActiveAsyncJob(t *testing.T) {
+	dsn := os.Getenv("STRIDEWISE_TEST_DSN")
+	if dsn == "" {
+		t.Skip("STRIDEWISE_TEST_DSN not set")
+	}
+	pool, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		t.Fatalf("connect failed: %v", err)
+	}
+	defer pool.Close()
+
+	store := NewPostgresStore(pool)
+	job := AsyncJob{
+		JobID:        "job-ability-1",
+		JobType:      task.TypeAbilityLevelCalc,
+		UserID:       "u1",
+		PayloadJSON:  []byte(`{}`),
+		Status:       "queued",
+		RetryCount:   0,
+		ErrorMessage: "",
+	}
+	if err := store.CreateAsyncJob(context.Background(), job); err != nil {
+		t.Fatalf("create job failed: %v", err)
+	}
+	got, err := store.FindActiveAsyncJob(context.Background(), "u1", task.TypeAbilityLevelCalc)
+	if err != nil {
+		t.Fatalf("find job failed: %v", err)
+	}
+	if got.JobID != job.JobID {
+		t.Fatalf("expected job_id %s, got %s", job.JobID, got.JobID)
 	}
 }

@@ -457,6 +457,23 @@ func (s *PostgresStore) UpdateAsyncJobStatus(ctx context.Context, jobID, status 
 	return nil
 }
 
+func (s *PostgresStore) FindActiveAsyncJob(ctx context.Context, userID, jobType string) (AsyncJob, error) {
+	var job AsyncJob
+	err := s.pool.QueryRow(ctx, `
+		SELECT job_id, job_type, user_id, payload_json, status, retry_count, error_message
+		FROM async_jobs
+		WHERE user_id=$1 AND job_type=$2 AND status IN ('queued','running')
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, userID, jobType).Scan(
+		&job.JobID, &job.JobType, &job.UserID, &job.PayloadJSON, &job.Status, &job.RetryCount, &job.ErrorMessage,
+	)
+	if err != nil {
+		return AsyncJob{}, err
+	}
+	return job, nil
+}
+
 func (s *PostgresStore) UpsertBaselineCurrent(ctx context.Context, b BaselineCurrent) error {
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO baseline_current (

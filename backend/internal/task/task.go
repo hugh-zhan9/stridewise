@@ -8,6 +8,7 @@ import (
 const TypeSyncJob = "sync:job"
 const TypeTrainingRecalc = "training:recalc"
 const TypeBaselineRecalc = "baseline:recalc"
+const TypeAbilityLevelCalc = "ability_level:calc"
 
 var allowedSources = map[string]struct{}{
 	"keep":   {},
@@ -34,6 +35,13 @@ type TrainingRecalcPayload struct {
 }
 
 type BaselineRecalcPayload struct {
+	JobID       string `json:"job_id"`
+	UserID      string `json:"user_id"`
+	TriggerType string `json:"trigger_type"`
+	TriggerRef  string `json:"trigger_ref"`
+}
+
+type AbilityLevelPayload struct {
 	JobID       string `json:"job_id"`
 	UserID      string `json:"user_id"`
 	TriggerType string `json:"trigger_type"`
@@ -141,6 +149,42 @@ func DecodeBaselineRecalcPayload(b []byte) (BaselineRecalcPayload, error) {
 	}
 	if p.TriggerRef == "" {
 		return BaselineRecalcPayload{}, errors.New("trigger_ref is required")
+	}
+	return p, nil
+}
+
+func EncodeAbilityLevelPayload(p AbilityLevelPayload) ([]byte, error) {
+	if p.JobID == "" {
+		return nil, errors.New("job_id is required")
+	}
+	if p.UserID == "" {
+		return nil, errors.New("user_id is required")
+	}
+	if p.TriggerType == "" {
+		return nil, errors.New("trigger_type is required")
+	}
+	if p.TriggerRef == "" {
+		return nil, errors.New("trigger_ref is required")
+	}
+	return json.Marshal(p)
+}
+
+func DecodeAbilityLevelPayload(b []byte) (AbilityLevelPayload, error) {
+	var p AbilityLevelPayload
+	if err := json.Unmarshal(b, &p); err != nil {
+		return AbilityLevelPayload{}, err
+	}
+	if p.JobID == "" {
+		return AbilityLevelPayload{}, errors.New("job_id is required")
+	}
+	if p.UserID == "" {
+		return AbilityLevelPayload{}, errors.New("user_id is required")
+	}
+	if p.TriggerType == "" {
+		return AbilityLevelPayload{}, errors.New("trigger_type is required")
+	}
+	if p.TriggerRef == "" {
+		return AbilityLevelPayload{}, errors.New("trigger_ref is required")
 	}
 	return p, nil
 }
