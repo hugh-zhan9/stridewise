@@ -68,13 +68,19 @@ func (fakeAI) Recommend(_ context.Context, _ ai.RecommendationInput) (ai.Recomme
 		HydrationTip:        "water",
 		ClothingTip:         "light",
 		Explanation:         []string{"a", "b"},
+		AlternativeWorkouts: []ai.RecommendationAlternativeWorkout{{
+			Type:        "treadmill",
+			Title:       "室内跑步机轻松跑",
+			DurationMin: 30,
+			Intensity:   "low",
+		}},
 	}, nil
 }
 
 type fakeWeather struct{}
 
 func (fakeWeather) GetSnapshot(_ context.Context, _ weather.Location) (weather.SnapshotInput, error) {
-	return weather.SnapshotInput{TemperatureC: 20}, nil
+	return weather.SnapshotInput{TemperatureC: 20, FeelsLikeC: 41}, nil
 }
 
 func (fakeWeather) GetForecast(_ context.Context, _ weather.Location) ([]weather.ForecastInput, error) {
@@ -102,5 +108,13 @@ func TestGenerateRecommendation(t *testing.T) {
 	}
 	if len(input.Weather.Forecasts) != 1 {
 		t.Fatalf("expected 1 forecast in input")
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal(store.lastRec.OutputJSON, &output); err != nil {
+		t.Fatalf("unmarshal output: %v", err)
+	}
+	if _, ok := output["AlternativeWorkouts"]; !ok {
+		t.Fatalf("expected AlternativeWorkouts in output")
 	}
 }

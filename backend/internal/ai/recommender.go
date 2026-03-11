@@ -109,4 +109,13 @@ type RecommendationOutput struct {
 	HydrationTip       string   `json:"hydration_tip"`
 	ClothingTip        string   `json:"clothing_tip"`
 	Explanation        []string `json:"explanation"`
+	AlternativeWorkouts []RecommendationAlternativeWorkout `json:"alternative_workouts"`
+}
+
+type RecommendationAlternativeWorkout struct {
+	Type        string   `json:"type"`
+	Title       string   `json:"title"`
+	DurationMin int      `json:"duration_min"`
+	Intensity   string   `json:"intensity"`
+	Tips        []string `json:"tips"`
 }

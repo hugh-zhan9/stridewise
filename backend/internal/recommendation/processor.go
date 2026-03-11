@@ -364,6 +364,16 @@ func mustJSON(v any) []byte {
 }
 
 func convertOutput(out ai.RecommendationOutput) RecommendationOutput {
+	alts := make([]AlternativeWorkout, 0, len(out.AlternativeWorkouts))
+	for _, a := range out.AlternativeWorkouts {
+		alts = append(alts, AlternativeWorkout{
+			Type:        a.Type,
+			Title:       a.Title,
+			DurationMin: a.DurationMin,
+			Intensity:   a.Intensity,
+			Tips:        a.Tips,
+		})
+	}
 	return RecommendationOutput{
 		ShouldRun:           out.ShouldRun,
 		WorkoutType:         out.WorkoutType,
@@ -374,6 +384,7 @@ func convertOutput(out ai.RecommendationOutput) RecommendationOutput {
 		HydrationTip:        out.HydrationTip,
 		ClothingTip:         out.ClothingTip,
 		Explanation:         out.Explanation,
+		AlternativeWorkouts: alts,
 	}
 }
 

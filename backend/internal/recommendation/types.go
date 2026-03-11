@@ -10,4 +10,13 @@ type RecommendationOutput struct {
 	HydrationTip        string
 	ClothingTip         string
 	Explanation         []string
+	AlternativeWorkouts []AlternativeWorkout
+}
+
+type AlternativeWorkout struct {
+	Type        string
+	Title       string
+	DurationMin int
+	Intensity   string
+	Tips        []string
 }
