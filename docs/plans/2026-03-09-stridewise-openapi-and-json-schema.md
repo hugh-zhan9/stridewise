@@ -9,13 +9,15 @@
 - ~~当前版本：v1.4.0~~
 - ~~当前版本：v1.5.0~~
 - ~~当前版本：v1.6.0~~
-- 当前版本：v1.7.0
+- ~~当前版本：v1.7.0~~
+- 当前版本：v1.8.0
 - 发布日期：2026-03-11
 - 文档状态：可评审
 
 ## 变更记录
 | 版本号 | 日期 | 变更说明 |
 | --- | --- | --- |
+| v1.8.0 | 2026-03-11 | 能力层级改为 AI 自动判定，Profile 响应新增能力层级元信息。 |
 | v1.7.0 | 2026-03-11 | 用户问卷字段落库，Profile schema 增加问卷字段。 |
 | v1.6.0 | 2026-03-10 | 训练总结/反馈支持 source_type/source_id，新增训练反馈内部接口说明。 |
 | v1.5.0 | 2026-03-10 | 新增内部建议生成/反馈接口与 Recommendation 扩展字段。 |
@@ -509,6 +511,8 @@ components:
         goal_type: { type: string }
         goal_target: { type: string }
         ability_level: { type: string, enum: [beginner, intermediate, advanced] }
+        ability_level_reason: { type: string, nullable: true }
+        ability_level_updated_at: { type: string, format: date-time, nullable: true }
         timezone: { type: string }
         running_years: { type: string, enum: ["0", "<1", "1-3", "3+"] }
         weekly_sessions: { type: string, enum: ["0-1", "2-3", "4+"] }
