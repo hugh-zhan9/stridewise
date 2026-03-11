@@ -25,8 +25,18 @@ func (recServiceStub) Feedback(_ context.Context, _ string, _ string, _ string, 
 	return nil
 }
 
+type profileStoreStub struct{}
+
+func (profileStoreStub) UpsertUserProfile(_ context.Context, _ storage.UserProfile) error {
+	return nil
+}
+
+func (profileStoreStub) GetUserProfile(_ context.Context, _ string) (storage.UserProfile, error) {
+	return storage.UserProfile{UserID: "u1", AbilityLevel: "beginner"}, nil
+}
+
 func TestGenerateRecommendation(t *testing.T) {
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, recServiceStub{})
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, profileStoreStub{}, nil, nil, nil, nil, nil, nil, recServiceStub{})
 	body := map[string]any{"user_id": "u1"}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/internal/v1/recommendations/generate", bytes.NewReader(b))

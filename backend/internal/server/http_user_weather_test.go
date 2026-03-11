@@ -18,6 +18,7 @@ type fakeStore struct {
 	snap    storage.WeatherSnapshot
 }
 
+
 func (f *fakeStore) UpsertUserProfile(_ context.Context, p storage.UserProfile) error {
 	f.profile = p
 	return nil
@@ -39,8 +40,9 @@ func (f *fakeStore) GetWeatherSnapshot(_ context.Context, _ string, _ time.Time)
 func TestCreateUserProfile_RequiresLocation(t *testing.T) {
 	store := &fakeStore{}
 	provider := weather.NewMockProvider(weather.SnapshotInput{TemperatureC: 20})
+	enqueuer := &abilityEnqueuerStub{}
 
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, nil)
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil)
 
 	body := map[string]any{
 		"user_id": "u1",
@@ -66,8 +68,9 @@ func TestCreateUserProfile_RequiresLocation(t *testing.T) {
 func TestCreateUserProfile_PersistsQuestionnaire(t *testing.T) {
 	store := &fakeStore{}
 	provider := weather.NewMockProvider(weather.SnapshotInput{TemperatureC: 20})
+	enqueuer := &abilityEnqueuerStub{}
 
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, nil)
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil)
 
 	body := map[string]any{
 		"user_id": "u1",
@@ -119,8 +122,9 @@ func TestCreateUserProfile_PersistsQuestionnaire(t *testing.T) {
 func TestCreateUserProfile_RejectsManualAbilityLevel(t *testing.T) {
 	store := &fakeStore{}
 	provider := weather.NewMockProvider(weather.SnapshotInput{TemperatureC: 20})
+	enqueuer := &abilityEnqueuerStub{}
 
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, nil)
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil)
 
 	body := map[string]any{
 		"user_id": "u1",

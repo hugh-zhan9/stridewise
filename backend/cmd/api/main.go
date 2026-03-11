@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"stridewise/backend/internal/ai"
+	"stridewise/backend/internal/asyncjob"
 	"stridewise/backend/internal/config"
 	"stridewise/backend/internal/recommendation"
 	"stridewise/backend/internal/server"
@@ -70,6 +71,7 @@ func main() {
 	jobAdapter := syncJobStoreAdapter{store: store}
 	asynqClient := asynq.NewClient(asynq.RedisClientOpt{Addr: cfg.Redis.Addr})
 	defer asynqClient.Close()
+	abilityEnqueuer := asyncjob.NewAbilityLevelEnqueuer(store, asynqClient)
 
 	mockProvider := weather.NewMockProvider(weather.SnapshotInput{
 		TemperatureC:      20,
@@ -118,6 +120,7 @@ func main() {
 		store,
 		store,
 		store,
+		abilityEnqueuer,
 		recProcessor,
 	)
 	app := kratos.New(

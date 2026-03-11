@@ -32,8 +32,9 @@ func (s *trainingStoreStub) GetTrainingLog(_ context.Context, _ string) (storage
 
 func TestCreateTrainingLog_Conflict(t *testing.T) {
 	store := &trainingStoreStub{conflict: true}
+	enqueuer := &abilityEnqueuerStub{}
 
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, store, nil, nil, nil)
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, store, nil, nil, enqueuer, nil)
 
 	body := map[string]any{
 		"user_id": "u1",

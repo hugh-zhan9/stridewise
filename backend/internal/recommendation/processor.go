@@ -40,6 +40,7 @@ type Processor struct {
 }
 
 var ErrFeedbackExists = errors.New("recommendation feedback exists")
+var ErrAbilityLevelNotReady = errors.New("ability level not ready")
 
 func NewProcessor(store Store, provider weather.Provider, recommender ai.Recommender) *Processor {
 	return &Processor{store: store, provider: provider, recommender: recommender, now: time.Now}
@@ -61,6 +62,9 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 	profile, err := p.store.GetUserProfile(ctx, userID)
 	if err != nil {
 		return storage.Recommendation{}, err
+	}
+	if profile.AbilityLevel == "" {
+		return storage.Recommendation{}, ErrAbilityLevelNotReady
 	}
 	baseline, err := p.store.GetBaselineCurrent(ctx, userID)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -94,7 +98,7 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		RequestID: uuid.NewString(),
 		UserProfile: ai.RecommendationUserProfile{
 			UserID:       profile.UserID,
-			AbilityLevel: profile.FitnessLevel,
+			AbilityLevel: profile.AbilityLevel,
 			GoalType:     profile.GoalType,
 			Age:          profile.Age,
 			WeightKG:     profile.WeightKG,

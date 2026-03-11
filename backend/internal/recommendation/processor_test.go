@@ -35,7 +35,7 @@ func (f *fakeStore) GetUserProfile(_ context.Context, _ string) (storage.UserPro
 	if f.profile.UserID != "" {
 		return f.profile, nil
 	}
-	return storage.UserProfile{UserID: "u1", LocationLat: 1, LocationLng: 2, Country: "CN", Province: "SH", City: "SH"}, nil
+	return storage.UserProfile{UserID: "u1", LocationLat: 1, LocationLng: 2, Country: "CN", Province: "SH", City: "SH", AbilityLevel: "beginner"}, nil
 }
 
 func (f *fakeStore) GetBaselineCurrent(_ context.Context, _ string) (storage.BaselineCurrent, error) {
@@ -168,6 +168,7 @@ func TestGenerateRecommendation_ConservativeTemplate(t *testing.T) {
 			Country: "CN",
 			Province: "SH",
 			City: "SH",
+			AbilityLevel: "beginner",
 			RunningYears: "1-3",
 			WeeklySessions: "2-3",
 			WeeklyDistanceKM: "5-15",
@@ -218,6 +219,7 @@ func TestGenerateRecommendation_ConservativeTemplateDiscomfort(t *testing.T) {
 			Country: "CN",
 			Province: "SH",
 			City: "SH",
+			AbilityLevel: "beginner",
 			RunningYears: "1-3",
 			WeeklySessions: "2-3",
 			WeeklyDistanceKM: "5-15",

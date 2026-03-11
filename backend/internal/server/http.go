@@ -78,6 +78,10 @@ type BaselineStore interface {
 	CreateTrainingFeedback(ctx context.Context, feedback storage.TrainingFeedback) error
 }
 
+type AbilityLevelEnqueuer interface {
+	EnqueueAbilityLevelCalc(ctx context.Context, userID, triggerType, triggerRef string) (string, error)
+}
+
 type RecommendationService interface {
 	Generate(ctx context.Context, userID string) (storage.Recommendation, error)
 	GetLatest(ctx context.Context, userID string) (storage.Recommendation, error)
@@ -176,6 +180,7 @@ func NewHTTPServer(
 	trainingStore TrainingLogStore,
 	asyncJobStore AsyncJobStore,
 	baselineStore BaselineStore,
+	abilityEnqueuer AbilityLevelEnqueuer,
 	recService RecommendationService,
 ) *kratoshttp.Server {
 	if addr == "" {
@@ -351,6 +356,14 @@ func NewHTTPServer(
 				http.Error(w, "save user profile failed", http.StatusInternalServerError)
 				return
 			}
+			if abilityEnqueuer == nil {
+				http.Error(w, "ability level subsystem unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			if _, err := abilityEnqueuer.EnqueueAbilityLevelCalc(r.Context(), req.UserID, "profile", req.UserID); err != nil {
+				http.Error(w, "enqueue ability level failed", http.StatusServiceUnavailable)
+				return
+			}
 			writeJSON(w, http.StatusOK, profile)
 		case http.MethodGet:
 			userID := r.URL.Query().Get("user_id")
@@ -502,6 +515,14 @@ func NewHTTPServer(
 				http.Error(w, err.Error(), http.StatusServiceUnavailable)
 				return
 			}
+			if abilityEnqueuer == nil {
+				http.Error(w, "ability level subsystem unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			if _, err := abilityEnqueuer.EnqueueAbilityLevelCalc(r.Context(), log.UserID, "training_create", log.LogID); err != nil {
+				http.Error(w, "enqueue ability level failed", http.StatusServiceUnavailable)
+				return
+			}
 			writeJSON(w, http.StatusOK, map[string]any{"log_id": log.LogID, "job_id": jobID})
 		case http.MethodGet:
 			userID := r.URL.Query().Get("user_id")
@@ -584,6 +605,14 @@ func NewHTTPServer(
 				http.Error(w, err.Error(), http.StatusServiceUnavailable)
 				return
 			}
+			if abilityEnqueuer == nil {
+				http.Error(w, "ability level subsystem unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			if _, err := abilityEnqueuer.EnqueueAbilityLevelCalc(r.Context(), log.UserID, "training_update", log.LogID); err != nil {
+				http.Error(w, "enqueue ability level failed", http.StatusServiceUnavailable)
+				return
+			}
 			writeJSON(w, http.StatusOK, map[string]any{"log_id": log.LogID, "job_id": jobID})
 		case http.MethodDelete:
 			log, err := trainingStore.GetTrainingLog(r.Context(), logID)
@@ -608,6 +637,14 @@ func NewHTTPServer(
 				http.Error(w, err.Error(), http.StatusServiceUnavailable)
 				return
 			}
+			if abilityEnqueuer == nil {
+				http.Error(w, "ability level subsystem unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			if _, err := abilityEnqueuer.EnqueueAbilityLevelCalc(r.Context(), log.UserID, "training_delete", logID); err != nil {
+				http.Error(w, "enqueue ability level failed", http.StatusServiceUnavailable)
+				return
+			}
 			writeJSON(w, http.StatusOK, map[string]any{"log_id": logID, "job_id": jobID})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -617,6 +654,10 @@ func NewHTTPServer(
 	srv.Handle("/internal/v1/recommendations/generate", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if recService == nil {
 			http.Error(w, "recommendation subsystem unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if profileStore == nil {
+			http.Error(w, "user profile subsystem unavailable", http.StatusServiceUnavailable)
 			return
 		}
 		if r.Method != http.MethodPost {
@@ -630,6 +671,20 @@ func NewHTTPServer(
 		}
 		if req.UserID == "" {
 			http.Error(w, "user_id required", http.StatusBadRequest)
+			return
+		}
+		profile, err := profileStore.GetUserProfile(r.Context(), req.UserID)
+		if err != nil {
+			http.Error(w, "user profile not found", http.StatusNotFound)
+			return
+		}
+		if profile.AbilityLevel == "" {
+			if abilityEnqueuer == nil {
+				http.Error(w, "ability level subsystem unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			_, _ = abilityEnqueuer.EnqueueAbilityLevelCalc(r.Context(), req.UserID, "recommendation", req.UserID)
+			http.Error(w, "ability_level_not_ready", http.StatusServiceUnavailable)
 			return
 		}
 		rec, err := recService.Generate(r.Context(), req.UserID)
