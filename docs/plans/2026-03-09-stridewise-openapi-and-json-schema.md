@@ -14,13 +14,15 @@
 - ~~当前版本：v1.9.0~~
 - ~~当前版本：v1.10.0~~
 - ~~当前版本：v1.11.0~~
-- 当前版本：v1.12.0
+- ~~当前版本：v1.12.0~~
+- 当前版本：v1.13.0
 - 发布日期：2026-03-11
 - 文档状态：可评审
 
 ## 变更记录
 | 版本号 | 日期 | 变更说明 |
 | --- | --- | --- |
+| v1.13.0 | 2026-03-11 | 新增滚动 7/30 天训练趋势分析内部接口与 schema。 |
 | v1.12.0 | 2026-03-11 | AI 输出解释字段移除 minItems 约束，允许少于 2 条；说明 explanation 条数不作为失败条件。 |
 | v1.11.0 | 2026-03-11 | Profile 增加静息心率；Forecast 增加预测 AQI 字段与来源。 |
 | v1.10.0 | 2026-03-11 | AI 推荐输入新增 latest_training_feedback 字段。 |
@@ -420,6 +422,36 @@ paths:
                 items:
                   $ref: '#/components/schemas/TrainingSummary'
 
+  /internal/v1/trends:
+    get:
+      tags: [training]
+      summary: 获取滚动训练趋势（内部）
+      operationId: getRollingTrendsInternal
+      security:
+        - internalToken: []
+      parameters:
+        - name: user_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: window
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [7d, 30d]
+        - name: as_of
+          in: query
+          required: false
+          schema: { type: string, example: "2026-03-10 12:00:00" }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrendResult'
+
   /internal/v1/training/feedback:
     post:
       tags: [training]
@@ -692,6 +724,51 @@ components:
         deleted_at: { type: string, format: date-time, nullable: true }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+
+    TrendResult:
+      type: object
+      properties:
+        window_start: { type: string, format: date }
+        window_end: { type: string, format: date }
+        summary:
+          $ref: '#/components/schemas/TrendSummary'
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrendPoint'
+
+    TrendSummary:
+      type: object
+      properties:
+        sessions: { type: integer }
+        distance_km: { type: number }
+        duration_sec: { type: integer }
+        avg_pace_sec_per_km: { type: integer }
+        avg_rpe: { type: number }
+        summary_count: { type: integer }
+        completion_rate_dist:
+          type: object
+          additionalProperties: { type: integer }
+        intensity_match_dist:
+          type: object
+          additionalProperties: { type: integer }
+        recovery_advice_tags:
+          type: object
+          additionalProperties: { type: integer }
+        acwr_srpe: { type: number, nullable: true }
+        acwr_distance: { type: number, nullable: true }
+        monotony: { type: number, nullable: true }
+        strain: { type: number, nullable: true }
+
+    TrendPoint:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        sessions: { type: integer }
+        distance_km: { type: number }
+        duration_sec: { type: integer }
+        avg_pace_sec_per_km: { type: integer }
+        avg_rpe: { type: number }
 
     FeedbackRequest:
       type: object
