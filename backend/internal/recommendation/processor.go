@@ -78,6 +78,7 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 	loadSummary, _ := p.store.GetRecentTrainingSummary(ctx, userID, now.Add(-7*24*time.Hour), now)
 	hasDiscomfort, _ := p.store.GetLatestTrainingDiscomfort(ctx, userID)
 
+	recoveryStatus := CalcRecoveryStatus(maxFloat(baseline.ACWRSRPE, baseline.ACWRDistance), baseline.Monotony)
 	constraints := ai.RecommendationConstraints{
 		WeatherRisk:   string(weatherRisk),
 		HasDiscomfort: hasDiscomfort,
@@ -128,6 +129,7 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		},
 		Constraints: constraints,
 		CurrentTime: now,
+		RecoveryStatus: recoveryStatus,
 	}
 
 	output, isFallback := p.callAI(ctx, input, weatherErr)
@@ -135,6 +137,7 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		WeatherRisk:   string(weatherRisk),
 		HasDiscomfort: hasDiscomfort,
 		HighLoad:      isHighLoad(baseline),
+		RecoveryStatus: recoveryStatus,
 	}, output)
 
 	if ruleResult.Output.RiskLevel == "" {
@@ -165,6 +168,13 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		return storage.Recommendation{}, err
 	}
 	return rec, nil
+}
+
+func maxFloat(a float64, b float64) float64 {
+	if a >= b {
+		return a
+	}
+	return b
 }
 
 func mapForecasts(input []weather.ForecastInput) []ai.RecommendationForecast {

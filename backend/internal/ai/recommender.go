@@ -17,6 +17,7 @@ type RecommendationInput struct {
 	TrainingLoad7D TrainingLoadSummary    `json:"training_load_7d"`
 	Constraints RecommendationConstraints `json:"constraints"`
 	CurrentTime time.Time                 `json:"current_time"`
+	RecoveryStatus string                 `json:"recovery_status"`
 }
 
 type RecommendationUserProfile struct {

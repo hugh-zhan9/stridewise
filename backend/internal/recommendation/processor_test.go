@@ -31,7 +31,12 @@ func (f *fakeStore) GetUserProfile(_ context.Context, _ string) (storage.UserPro
 }
 
 func (f *fakeStore) GetBaselineCurrent(_ context.Context, _ string) (storage.BaselineCurrent, error) {
-	return storage.BaselineCurrent{UserID: "u1"}, nil
+	return storage.BaselineCurrent{
+		UserID:          "u1",
+		ACWRSRPE:        1.6,
+		ACWRDistance:    1.2,
+		Monotony:        1.0,
+	}, nil
 }
 
 func (f *fakeStore) CreateWeatherSnapshot(_ context.Context, _ storage.WeatherSnapshot) error { return nil }
@@ -108,6 +113,9 @@ func TestGenerateRecommendation(t *testing.T) {
 	}
 	if len(input.Weather.Forecasts) != 1 {
 		t.Fatalf("expected 1 forecast in input")
+	}
+	if input.RecoveryStatus != "red" {
+		t.Fatalf("expected recovery_status red")
 	}
 
 	var output map[string]any
