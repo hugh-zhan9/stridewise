@@ -60,10 +60,15 @@ type BaselineRecalcEnqueuer interface {
 	EnqueueBaselineRecalc(ctx context.Context, userID, triggerType, triggerRef string) error
 }
 
+type AbilityLevelEnqueuer interface {
+	EnqueueAbilityLevelCalc(ctx context.Context, userID, triggerType, triggerRef string) error
+}
+
 type Processor struct {
 	store            Store
 	connectors       map[string]Connector
 	baselineEnqueuer BaselineRecalcEnqueuer
+	abilityEnqueuer  AbilityLevelEnqueuer
 }
 
 func NewProcessor(store Store, connectors map[string]Connector) *Processor {
@@ -72,6 +77,10 @@ func NewProcessor(store Store, connectors map[string]Connector) *Processor {
 
 func (p *Processor) SetBaselineEnqueuer(enqueuer BaselineRecalcEnqueuer) {
 	p.baselineEnqueuer = enqueuer
+}
+
+func (p *Processor) SetAbilityEnqueuer(enqueuer AbilityLevelEnqueuer) {
+	p.abilityEnqueuer = enqueuer
 }
 
 func (p *Processor) ProcessSyncJob(ctx context.Context, jobID, userID, source string, retryCount int) error {
@@ -135,6 +144,11 @@ func (p *Processor) ProcessSyncJob(ctx context.Context, jobID, userID, source st
 	if p.baselineEnqueuer != nil {
 		if err := p.baselineEnqueuer.EnqueueBaselineRecalc(ctx, userID, "sync", jobID); err != nil {
 			_ = p.store.AppendSyncError(ctx, jobID, source, "enqueue baseline recalc failed: "+err.Error(), true)
+		}
+	}
+	if p.abilityEnqueuer != nil {
+		if err := p.abilityEnqueuer.EnqueueAbilityLevelCalc(ctx, userID, "sync", jobID); err != nil {
+			_ = p.store.AppendSyncError(ctx, jobID, source, "enqueue ability level failed: "+err.Error(), true)
 		}
 	}
 	return nil

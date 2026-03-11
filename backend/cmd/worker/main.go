@@ -55,6 +55,7 @@ func main() {
 		"fit":    fitconnector.New(cfg.FIT.DataFile),
 	})
 	processor.SetBaselineEnqueuer(asyncjob.NewBaselineEnqueuer(store, asynqClient))
+	processor.SetAbilityEnqueuer(asyncjob.NewAbilityLevelEnqueuer(store, asynqClient))
 	worker.SetSyncProcessor(processor)
 	worker.SetTrainingProcessor(training.NewProcessor(store))
 

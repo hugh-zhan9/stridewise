@@ -60,7 +60,7 @@ func (b *baselineStoreStubWithSummary) CreateTrainingFeedback(_ context.Context,
 }
 
 func TestGetBaselineCurrent(t *testing.T) {
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, nil, nil, &baselineStoreStub{}, nil)
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, nil, nil, &baselineStoreStub{}, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/internal/v1/baseline/current?user_id=u1", nil)
 	req.Header.Set("X-Internal-Token", "token")
@@ -72,7 +72,7 @@ func TestGetBaselineCurrent(t *testing.T) {
 }
 
 func TestCreateTrainingFeedbackWithSource(t *testing.T) {
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, nil, nil, &baselineStoreStub{}, nil)
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, nil, nil, &baselineStoreStub{}, nil, nil)
 
 	body := `{"user_id":"u1","source_type":"activity","source_id":"1","content":"ok"}`
 	req := httptest.NewRequest(http.MethodPost, "/internal/v1/training/feedback", strings.NewReader(body))
@@ -85,7 +85,7 @@ func TestCreateTrainingFeedbackWithSource(t *testing.T) {
 }
 
 func TestListTrainingSummariesResponseSnakeCase(t *testing.T) {
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, nil, nil, &baselineStoreStubWithSummary{}, nil)
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, nil, nil, &baselineStoreStubWithSummary{}, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/internal/v1/training/summaries?user_id=u1", nil)
 	req.Header.Set("X-Internal-Token", "token")

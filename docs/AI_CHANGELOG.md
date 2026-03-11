@@ -326,3 +326,40 @@
 - `backend/internal/recommendation/processor.go`
 - `backend/internal/recommendation/processor_test.go`
 ----------------------------------------
+## [2026-03-11 14:41] [Feature]
+- **Change**: 用户档案新增能力层级字段
+- **Risk Analysis**: 能力层级字段新增与Upsert逻辑调整，若旧数据迁移顺序不同可能引起字段缺失或默认值不一致；存储测试仍依赖外部DSN而跳过。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/migrations/003_user_weather.sql`
+- `backend/internal/storage/postgres.go`
+- `backend/internal/storage/postgres_user_weather_test.go`
+----------------------------------------
+## [2026-03-11 14:46] [Feature]
+- **Change**: 用户档案接口禁止手动能力层级
+- **Risk Analysis**: profile 接口严格拒绝 fitness_level/ability_level 字段，旧客户端若仍发送会返回 400；需要同步更新调用方。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/server/http.go`
+- `backend/internal/server/http_user_weather_test.go`
+----------------------------------------
+## [2026-03-11 14:50] [Feature]
+- **Change**: 新增能力层级异步任务类型
+- **Risk Analysis**: 新增 ability_level:calc 任务与入队逻辑，若 active 任务查询失败可能导致重复入队；FindActiveAsyncJob 仅按 queued/running 判定，需关注状态一致性。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/task/task.go`
+- `backend/internal/task/task_test.go`
+- `backend/internal/asyncjob/ability_level_enqueuer.go`
+- `backend/internal/storage/postgres.go`
+- `backend/internal/storage/postgres_training_test.go`
+----------------------------------------
+## [2026-03-11 15:30] [Feature]
+- **Change**: 同步流程触发能力层级计算
+- **Risk Analysis**: 同步完成后新增能力层级任务入队，若任务系统异常可能导致重复或遗漏能力计算；同步流程仍以主导入成功为主，不影响导入结果。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/sync/processor.go`
+- `backend/internal/sync/processor_test.go`
+- `backend/cmd/worker/main.go`
+----------------------------------------

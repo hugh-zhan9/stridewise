@@ -70,6 +70,15 @@ func (f *fakeEnqueuer) EnqueueBaselineRecalc(_ context.Context, _ string, _ stri
 	return nil
 }
 
+type fakeAbilityEnqueuer struct {
+	called bool
+}
+
+func (f *fakeAbilityEnqueuer) EnqueueAbilityLevelCalc(_ context.Context, _ string, _ string, _ string) error {
+	f.called = true
+	return nil
+}
+
 func TestProcessor_ProcessSyncJob_KeepSource(t *testing.T) {
 	store := &fakeStore{}
 	p := NewProcessor(store, map[string]Connector{
@@ -112,5 +121,22 @@ func TestProcessor_ProcessSyncJob_EnqueueBaseline(t *testing.T) {
 	}
 	if !enqueuer.called {
 		t.Fatal("expected baseline enqueuer called")
+	}
+}
+
+func TestProcessor_ProcessSyncJob_EnqueueAbilityLevel(t *testing.T) {
+	store := &fakeStore{}
+	enqueuer := &fakeAbilityEnqueuer{}
+	p := NewProcessor(store, map[string]Connector{
+		"keep": fakeConnector{},
+	})
+	p.SetAbilityEnqueuer(enqueuer)
+
+	err := p.ProcessSyncJob(context.Background(), "job-1", "u1", "keep", 0)
+	if err != nil {
+		t.Fatalf("process failed: %v", err)
+	}
+	if !enqueuer.called {
+		t.Fatal("expected ability enqueuer called")
 	}
 }
