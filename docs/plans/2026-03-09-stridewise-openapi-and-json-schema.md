@@ -10,13 +10,15 @@
 - ~~当前版本：v1.5.0~~
 - ~~当前版本：v1.6.0~~
 - ~~当前版本：v1.7.0~~
-- 当前版本：v1.8.0
+- ~~当前版本：v1.8.0~~
+- 当前版本：v1.9.0
 - 发布日期：2026-03-11
 - 文档状态：可评审
 
 ## 变更记录
 | 版本号 | 日期 | 变更说明 |
 | --- | --- | --- |
+| v1.9.0 | 2026-03-11 | 内部接口响应统一包裹 Envelope，标准化错误与兜底元信息字段。 |
 | v1.8.0 | 2026-03-11 | 能力层级改为 AI 自动判定，Profile 响应新增能力层级元信息。 |
 | v1.7.0 | 2026-03-11 | 用户问卷字段落库，Profile schema 增加问卷字段。 |
 | v1.6.0 | 2026-03-10 | 训练总结/反馈支持 source_type/source_id，新增训练反馈内部接口说明。 |
@@ -42,6 +44,9 @@
   - 业务 API 暂不启用完整用户鉴权（单用户/受控环境）
   - 当前阶段全部 API 均按内部接口治理，统一使用 `X-Internal-Token`
   - 进入多用户或 App 外放阶段后，补充 JWT/OAuth2 方案
+- 响应标准化：
+  - 内部接口响应统一 Envelope 包裹（`data/error/meta`）
+  - 本文档中 response `schema` 表达 `data` 字段的业务结构
 
 ```yaml
 openapi: 3.1.0
@@ -460,13 +465,13 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/Envelope'
     NotFound:
       description: Not Found
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Problem'
+            $ref: '#/components/schemas/Envelope'
 
   schemas:
     Problem:
@@ -478,6 +483,37 @@ components:
         status: { type: integer }
         detail: { type: string }
         instance: { type: string }
+
+    EnvelopeError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [bad_request, unauthorized, forbidden, not_found, conflict, dependency_unavailable, internal_error]
+        message: { type: string }
+
+    EnvelopeMeta:
+      type: object
+      required: [request_id, timestamp, confidence]
+      properties:
+        request_id: { type: string }
+        timestamp: { type: string, format: date-time }
+        fallback_reason:
+          type: string
+          enum: [insufficient_data, weather_api_failed, ai_unavailable, ability_level_not_ready, safety_override, third_party_import_failed, field_missing]
+        confidence: { type: number, minimum: 0, maximum: 1 }
+
+    Envelope:
+      type: object
+      required: [data, error, meta]
+      properties:
+        data: {}
+        error:
+          $ref: '#/components/schemas/EnvelopeError'
+          nullable: true
+        meta:
+          $ref: '#/components/schemas/EnvelopeMeta'
 
     ProfileInitRequest:
       type: object
