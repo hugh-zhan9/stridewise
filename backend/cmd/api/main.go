@@ -80,6 +80,16 @@ func main() {
 		AQI:               50,
 		UVIndex:           3,
 	})
+	provider := weather.Provider(mockProvider)
+	if cfg.Weather.QWeather.APIKey == "" || cfg.Weather.QWeather.APIHost == "" {
+		log.Printf("qweather未配置，使用mock provider")
+	} else {
+		provider = weather.NewQWeatherProvider(weather.QWeatherConfig{
+			APIKey:    cfg.Weather.QWeather.APIKey,
+			APIHost:   cfg.Weather.QWeather.APIHost,
+			TimeoutMs: cfg.Weather.QWeather.TimeoutMs,
+		})
+	}
 
 	var recommender ai.Recommender
 	if cfg.AI.Provider == "openai" {
@@ -92,7 +102,7 @@ func main() {
 			Temperature: cfg.AI.OpenAI.Temperature,
 		})
 	}
-	recProcessor := recommendation.NewProcessor(store, mockProvider, recommender)
+	recProcessor := recommendation.NewProcessor(store, provider, recommender)
 	recProcessor.SetAIInfo(cfg.AI.Provider, cfg.AI.OpenAI.Model)
 
 	httpSrv := server.NewHTTPServer(
@@ -104,7 +114,7 @@ func main() {
 		asynqClient,
 		store,
 		store,
-		mockProvider,
+		provider,
 		store,
 		store,
 		store,
