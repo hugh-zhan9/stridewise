@@ -131,6 +131,23 @@ type trainingFeedbackRequest struct {
 	Content    string `json:"content"`
 }
 
+type trainingSummaryResponse struct {
+	SummaryID        string  `json:"summary_id"`
+	UserID           string  `json:"user_id"`
+	SourceType       string  `json:"source_type"`
+	SourceID         string  `json:"source_id"`
+	LogID            string  `json:"log_id,omitempty"`
+	CompletionRate   string  `json:"completion_rate"`
+	IntensityMatch   string  `json:"intensity_match"`
+	RecoveryAdvice   string  `json:"recovery_advice"`
+	AnomalyNotes     string  `json:"anomaly_notes"`
+	PerformanceNotes string  `json:"performance_notes"`
+	NextSuggestion   string  `json:"next_suggestion"`
+	DeletedAt        *string `json:"deleted_at,omitempty"`
+	CreatedAt        string  `json:"created_at"`
+	UpdatedAt        string  `json:"updated_at"`
+}
+
 type recommendationGenerateRequest struct {
 	UserID string `json:"user_id"`
 }
@@ -761,7 +778,7 @@ func NewHTTPServer(
 			http.Error(w, "list training summaries failed", http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, http.StatusOK, summaries)
+		writeJSON(w, http.StatusOK, formatTrainingSummaries(summaries))
 	}))
 
 	srv.Handle("/internal/v1/training/feedback", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -830,6 +847,33 @@ func formatRecommendationResponse(rec storage.Recommendation) map[string]any {
 		"prompt_version":      rec.PromptVersion,
 		"engine_version":      rec.EngineVersion,
 	}
+}
+
+func formatTrainingSummaries(items []storage.TrainingSummary) []trainingSummaryResponse {
+	out := make([]trainingSummaryResponse, 0, len(items))
+	for _, s := range items {
+		resp := trainingSummaryResponse{
+			SummaryID:        s.SummaryID,
+			UserID:           s.UserID,
+			SourceType:       s.SourceType,
+			SourceID:         s.SourceID,
+			LogID:            s.LogID,
+			CompletionRate:   s.CompletionRate,
+			IntensityMatch:   s.IntensityMatch,
+			RecoveryAdvice:   s.RecoveryAdvice,
+			AnomalyNotes:     s.AnomalyNotes,
+			PerformanceNotes: s.PerformanceNotes,
+			NextSuggestion:   s.NextSuggestion,
+			CreatedAt:        s.CreatedAt.UTC().Format(time.RFC3339),
+			UpdatedAt:        s.UpdatedAt.UTC().Format(time.RFC3339),
+		}
+		if s.DeletedAt != nil {
+			ts := s.DeletedAt.UTC().Format(time.RFC3339)
+			resp.DeletedAt = &ts
+		}
+		out = append(out, resp)
+	}
+	return out
 }
 
 func rawJSON(input []byte) json.RawMessage {

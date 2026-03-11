@@ -293,3 +293,11 @@
 - `backend/internal/server/http_baseline_test.go`
 - `backend/internal/worker/handler_baseline_test.go`
 ----------------------------------------
+## [2026-03-11 09:28] [Feature]
+- **Change**: 训练总结列表响应字段改为snake_case
+- **Risk Analysis**: 仅影响训练总结列表输出字段名，若前端依赖旧字段将解析失败
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/server/http.go`
+- `backend/internal/server/http_baseline_test.go`
+----------------------------------------
