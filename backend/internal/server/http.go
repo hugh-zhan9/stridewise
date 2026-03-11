@@ -94,26 +94,26 @@ type createSyncJobRequest struct {
 }
 
 type userProfileRequest struct {
-	UserID         string   `json:"user_id"`
-	Gender         string   `json:"gender"`
-	Age            int      `json:"age"`
-	HeightCM       int      `json:"height_cm"`
-	WeightKG       int      `json:"weight_kg"`
-	GoalType       string   `json:"goal_type"`
-	GoalCycle      string   `json:"goal_cycle"`
-	GoalFrequency  int      `json:"goal_frequency"`
-	GoalPace       string   `json:"goal_pace"`
-	RunningYears   string   `json:"running_years"`
-	WeeklySessions string   `json:"weekly_sessions"`
-	WeeklyDistanceKM string `json:"weekly_distance_km"`
-	LongestRunKM   string   `json:"longest_run_km"`
-	RecentDiscomfort string `json:"recent_discomfort"`
-	LocationLat    *float64 `json:"location_lat"`
-	LocationLng    *float64 `json:"location_lng"`
-	Country        string   `json:"country"`
-	Province       string   `json:"province"`
-	City           string   `json:"city"`
-	LocationSource string   `json:"location_source"`
+	UserID           string   `json:"user_id"`
+	Gender           string   `json:"gender"`
+	Age              int      `json:"age"`
+	HeightCM         int      `json:"height_cm"`
+	WeightKG         int      `json:"weight_kg"`
+	GoalType         string   `json:"goal_type"`
+	GoalCycle        string   `json:"goal_cycle"`
+	GoalFrequency    int      `json:"goal_frequency"`
+	GoalPace         string   `json:"goal_pace"`
+	RunningYears     string   `json:"running_years"`
+	WeeklySessions   string   `json:"weekly_sessions"`
+	WeeklyDistanceKM string   `json:"weekly_distance_km"`
+	LongestRunKM     string   `json:"longest_run_km"`
+	RecentDiscomfort string   `json:"recent_discomfort"`
+	LocationLat      *float64 `json:"location_lat"`
+	LocationLng      *float64 `json:"location_lng"`
+	Country          string   `json:"country"`
+	Province         string   `json:"province"`
+	City             string   `json:"city"`
+	LocationSource   string   `json:"location_source"`
 }
 
 type weatherSnapshotRequest struct {
@@ -157,6 +157,24 @@ type trainingSummaryResponse struct {
 	UpdatedAt        string  `json:"updated_at"`
 }
 
+type responseEnvelope struct {
+	Data  any            `json:"data"`
+	Error *responseError `json:"error"`
+	Meta  responseMeta   `json:"meta"`
+}
+
+type responseError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type responseMeta struct {
+	RequestID      string  `json:"request_id"`
+	Timestamp      string  `json:"timestamp"`
+	FallbackReason string  `json:"fallback_reason"`
+	Confidence     float64 `json:"confidence"`
+}
+
 type recommendationGenerateRequest struct {
 	UserID string `json:"user_id"`
 }
@@ -192,71 +210,69 @@ func NewHTTPServer(
 		kratoshttp.Filter(middleware.InternalTokenFilter(internalToken)),
 	)
 
-	srv.Handle("/internal/health", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+	srv.Handle("/internal/health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, r, http.StatusOK, map[string]any{"status": "ok"})
 	}))
 
-	srv.Handle("/internal/metrics", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("metrics_placeholder 1\n"))
+	srv.Handle("/internal/metrics", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, r, http.StatusOK, map[string]any{"metrics": "metrics_placeholder 1\n"})
 	}))
 
 	srv.Handle("/internal/v1/sync/jobs", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 			return
 		}
 		if creator == nil || asynqClient == nil {
-			http.Error(w, "sync subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "sync subsystem unavailable", "", 1.0)
 			return
 		}
 
 		var req createSyncJobRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "bad request", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "bad request", "", 1.0)
 			return
 		}
 		payload := task.SyncJobPayload{JobID: uuid.NewString(), UserID: req.UserID, Source: req.Source, RetryCount: 0}
 		b, err := task.EncodeSyncJobPayload(payload)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", err.Error(), "", 1.0)
 			return
 		}
 		if err := creator.CreateSyncJob(r.Context(), payload.JobID, payload.UserID, payload.Source); err != nil {
-			http.Error(w, "create sync job failed", http.StatusInternalServerError)
+			writeError(w, r, http.StatusInternalServerError, "", "create sync job failed", "", 1.0)
 			return
 		}
 		_, err = asynqClient.Enqueue(asynq.NewTask(task.TypeSyncJob, b), asynq.Queue("default"))
 		if err != nil {
-			http.Error(w, "enqueue failed", http.StatusInternalServerError)
+			writeError(w, r, http.StatusInternalServerError, "", "enqueue failed", "", 1.0)
 			return
 		}
-		writeJSON(w, http.StatusAccepted, map[string]any{"job_id": payload.JobID, "status": "queued"})
+		writeJSON(w, r, http.StatusAccepted, map[string]any{"job_id": payload.JobID, "status": "queued"})
 	}))
 
 	srv.HandlePrefix("/internal/v1/sync/jobs/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if reader == nil || retryer == nil || asynqClient == nil {
-			http.Error(w, "sync subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "sync subsystem unavailable", "", 1.0)
 			return
 		}
 
 		path := strings.TrimPrefix(r.URL.Path, "/internal/v1/sync/jobs/")
 		if path == "" {
-			http.NotFound(w, r)
+			writeError(w, r, http.StatusNotFound, "", "not found", "", 1.0)
 			return
 		}
 
 		if strings.HasSuffix(path, "/retry") {
 			if r.Method != http.MethodPost {
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 				return
 			}
 			jobID := strings.TrimSuffix(path, "/retry")
 			jobID = strings.TrimSuffix(jobID, "/")
 			job, err := retryer.RetrySyncJob(r.Context(), jobID)
 			if err != nil {
-				http.Error(w, "retry sync job failed", http.StatusInternalServerError)
+				writeError(w, r, http.StatusInternalServerError, "", "retry sync job failed", "", 1.0)
 				return
 			}
 			payload := task.SyncJobPayload{
@@ -267,14 +283,14 @@ func NewHTTPServer(
 			}
 			b, err := task.EncodeSyncJobPayload(payload)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", err.Error(), "", 1.0)
 				return
 			}
 			if _, err := asynqClient.Enqueue(asynq.NewTask(task.TypeSyncJob, b), asynq.Queue("default")); err != nil {
-				http.Error(w, "enqueue failed", http.StatusInternalServerError)
+				writeError(w, r, http.StatusInternalServerError, "", "enqueue failed", "", 1.0)
 				return
 			}
-			writeJSON(w, http.StatusAccepted, map[string]any{
+			writeJSON(w, r, http.StatusAccepted, map[string]any{
 				"job_id":      job.JobID,
 				"status":      "queued",
 				"retry_count": job.RetryCount,
@@ -283,21 +299,21 @@ func NewHTTPServer(
 		}
 
 		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 			return
 		}
 		jobID := strings.TrimSuffix(path, "/")
 		job, err := reader.GetSyncJob(r.Context(), jobID)
 		if err != nil {
-			http.Error(w, "sync job not found", http.StatusNotFound)
+			writeError(w, r, http.StatusNotFound, "", "sync job not found", "", 1.0)
 			return
 		}
-		writeJSON(w, http.StatusOK, job)
+		writeJSON(w, r, http.StatusOK, job)
 	}))
 
 	srv.Handle("/internal/v1/user/profile", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if profileStore == nil {
-			http.Error(w, "user profile subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "user profile subsystem unavailable", "", 1.0)
 			return
 		}
 		switch r.Method {
@@ -305,109 +321,109 @@ func NewHTTPServer(
 			var req userProfileRequest
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
-				http.Error(w, "bad request", http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", "bad request", "", 1.0)
 				return
 			}
 			var raw map[string]json.RawMessage
 			if err := json.Unmarshal(body, &raw); err != nil {
-				http.Error(w, "bad request", http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", "bad request", "", 1.0)
 				return
 			}
 			if _, ok := raw["fitness_level"]; ok {
-				http.Error(w, "fitness_level not allowed", http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", "fitness_level not allowed", "", 1.0)
 				return
 			}
 			if _, ok := raw["ability_level"]; ok {
-				http.Error(w, "ability_level not allowed", http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", "ability_level not allowed", "", 1.0)
 				return
 			}
 			if err := json.Unmarshal(body, &req); err != nil {
-				http.Error(w, "bad request", http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", "bad request", "", 1.0)
 				return
 			}
 			if err := validateUserProfileRequest(req); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", err.Error(), "", 1.0)
 				return
 			}
 			profile := storage.UserProfile{
-				UserID:         req.UserID,
-				Gender:         req.Gender,
-				Age:            req.Age,
-				HeightCM:       req.HeightCM,
-				WeightKG:       req.WeightKG,
-				GoalType:       req.GoalType,
-				GoalCycle:      req.GoalCycle,
-				GoalFrequency:  req.GoalFrequency,
-				GoalPace:       req.GoalPace,
-				FitnessLevel:   "unknown",
-				RunningYears:   req.RunningYears,
-				WeeklySessions: req.WeeklySessions,
+				UserID:           req.UserID,
+				Gender:           req.Gender,
+				Age:              req.Age,
+				HeightCM:         req.HeightCM,
+				WeightKG:         req.WeightKG,
+				GoalType:         req.GoalType,
+				GoalCycle:        req.GoalCycle,
+				GoalFrequency:    req.GoalFrequency,
+				GoalPace:         req.GoalPace,
+				FitnessLevel:     "unknown",
+				RunningYears:     req.RunningYears,
+				WeeklySessions:   req.WeeklySessions,
 				WeeklyDistanceKM: req.WeeklyDistanceKM,
-				LongestRunKM:   req.LongestRunKM,
+				LongestRunKM:     req.LongestRunKM,
 				RecentDiscomfort: req.RecentDiscomfort,
-				LocationLat:    *req.LocationLat,
-				LocationLng:    *req.LocationLng,
-				Country:        req.Country,
-				Province:       req.Province,
-				City:           req.City,
-				LocationSource: req.LocationSource,
+				LocationLat:      *req.LocationLat,
+				LocationLng:      *req.LocationLng,
+				Country:          req.Country,
+				Province:         req.Province,
+				City:             req.City,
+				LocationSource:   req.LocationSource,
 			}
 			if err := profileStore.UpsertUserProfile(r.Context(), profile); err != nil {
-				http.Error(w, "save user profile failed", http.StatusInternalServerError)
+				writeError(w, r, http.StatusInternalServerError, "", "save user profile failed", "", 1.0)
 				return
 			}
 			if abilityEnqueuer == nil {
-				http.Error(w, "ability level subsystem unavailable", http.StatusServiceUnavailable)
+				writeError(w, r, http.StatusServiceUnavailable, "", "ability level subsystem unavailable", "", 1.0)
 				return
 			}
 			if _, err := abilityEnqueuer.EnqueueAbilityLevelCalc(r.Context(), req.UserID, "profile", req.UserID); err != nil {
-				http.Error(w, "enqueue ability level failed", http.StatusServiceUnavailable)
+				writeError(w, r, http.StatusServiceUnavailable, "", "enqueue ability level failed", "", 1.0)
 				return
 			}
-			writeJSON(w, http.StatusOK, profile)
+			writeJSON(w, r, http.StatusOK, profile)
 		case http.MethodGet:
 			userID := r.URL.Query().Get("user_id")
 			if userID == "" {
-				http.Error(w, "user_id required", http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", "user_id required", "", 1.0)
 				return
 			}
 			profile, err := profileStore.GetUserProfile(r.Context(), userID)
 			if err != nil {
-				http.Error(w, "user profile not found", http.StatusNotFound)
+				writeError(w, r, http.StatusNotFound, "", "user profile not found", "", 1.0)
 				return
 			}
-			writeJSON(w, http.StatusOK, profile)
+			writeJSON(w, r, http.StatusOK, profile)
 		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 		}
 	}))
 
 	srv.Handle("/internal/v1/weather/snapshot", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if weatherStore == nil || profileStore == nil || weatherProvider == nil {
-			http.Error(w, "weather subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "weather subsystem unavailable", "", 1.0)
 			return
 		}
 		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 			return
 		}
 		var req weatherSnapshotRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "bad request", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "bad request", "", 1.0)
 			return
 		}
 		if req.UserID == "" {
-			http.Error(w, "user_id required", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "user_id required", "", 1.0)
 			return
 		}
 		snapshotDate, err := parseDate(req.Date)
 		if err != nil {
-			http.Error(w, "invalid date", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "invalid date", "", 1.0)
 			return
 		}
 		profile, err := profileStore.GetUserProfile(r.Context(), req.UserID)
 		if err != nil {
-			http.Error(w, "user profile not found", http.StatusNotFound)
+			writeError(w, r, http.StatusNotFound, "", "user profile not found", "", 1.0)
 			return
 		}
 		location := weather.Location{
@@ -419,7 +435,7 @@ func NewHTTPServer(
 		}
 		input, err := weatherProvider.GetSnapshot(r.Context(), location)
 		if err != nil {
-			http.Error(w, "weather provider error", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "weather provider error", "", 1.0)
 			return
 		}
 		risk := weather.ClassifyRisk(input)
@@ -436,10 +452,10 @@ func NewHTTPServer(
 			RiskLevel:         string(risk),
 		}
 		if err := weatherStore.CreateWeatherSnapshot(r.Context(), snapshot); err != nil {
-			http.Error(w, "save weather snapshot failed", http.StatusInternalServerError)
+			writeError(w, r, http.StatusInternalServerError, "", "save weather snapshot failed", "", 1.0)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
+		writeJSON(w, r, http.StatusOK, map[string]any{
 			"user_id":    req.UserID,
 			"date":       snapshotDate.Format("2006-01-02"),
 			"risk_level": snapshot.RiskLevel,
@@ -448,29 +464,29 @@ func NewHTTPServer(
 
 	srv.Handle("/internal/v1/weather/risk", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if weatherStore == nil {
-			http.Error(w, "weather subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "weather subsystem unavailable", "", 1.0)
 			return
 		}
 		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 			return
 		}
 		userID := r.URL.Query().Get("user_id")
 		if userID == "" {
-			http.Error(w, "user_id required", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "user_id required", "", 1.0)
 			return
 		}
 		snapshotDate, err := parseDate(r.URL.Query().Get("date"))
 		if err != nil {
-			http.Error(w, "invalid date", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "invalid date", "", 1.0)
 			return
 		}
 		snapshot, err := weatherStore.GetWeatherSnapshot(r.Context(), userID, snapshotDate)
 		if err != nil {
-			http.Error(w, "weather snapshot not found", http.StatusNotFound)
+			writeError(w, r, http.StatusNotFound, "", "weather snapshot not found", "", 1.0)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
+		writeJSON(w, r, http.StatusOK, map[string]any{
 			"user_id":    userID,
 			"date":       snapshotDate.Format("2006-01-02"),
 			"risk_level": snapshot.RiskLevel,
@@ -479,7 +495,7 @@ func NewHTTPServer(
 
 	srv.Handle("/internal/v1/training/logs", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if trainingStore == nil {
-			http.Error(w, "training subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "training subsystem unavailable", "", 1.0)
 			return
 		}
 
@@ -487,57 +503,57 @@ func NewHTTPServer(
 		case http.MethodPost:
 			var req trainingLogRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				http.Error(w, "bad request", http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", "bad request", "", 1.0)
 				return
 			}
 			log, start, end, err := buildTrainingLog(req)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", err.Error(), "", 1.0)
 				return
 			}
 			conflict, err := trainingStore.HasTrainingConflict(r.Context(), req.UserID, start, end, "")
 			if err != nil {
-				http.Error(w, "conflict check failed", http.StatusInternalServerError)
+				writeError(w, r, http.StatusInternalServerError, "", "conflict check failed", "", 1.0)
 				return
 			}
 			if conflict {
-				http.Error(w, "training time conflict", http.StatusConflict)
+				writeError(w, r, http.StatusConflict, "", "training time conflict", "", 1.0)
 				return
 			}
 			log.LogID = uuid.NewString()
 			log.Source = "manual"
 			if err := trainingStore.CreateTrainingLog(r.Context(), log); err != nil {
-				http.Error(w, "create training log failed", http.StatusInternalServerError)
+				writeError(w, r, http.StatusInternalServerError, "", "create training log failed", "", 1.0)
 				return
 			}
 			jobID, err := enqueueBaselineRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, "training_create", log.LogID)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				writeError(w, r, http.StatusServiceUnavailable, "", err.Error(), "", 1.0)
 				return
 			}
 			if abilityEnqueuer == nil {
-				http.Error(w, "ability level subsystem unavailable", http.StatusServiceUnavailable)
+				writeError(w, r, http.StatusServiceUnavailable, "", "ability level subsystem unavailable", "", 1.0)
 				return
 			}
 			if _, err := abilityEnqueuer.EnqueueAbilityLevelCalc(r.Context(), log.UserID, "training_create", log.LogID); err != nil {
-				http.Error(w, "enqueue ability level failed", http.StatusServiceUnavailable)
+				writeError(w, r, http.StatusServiceUnavailable, "", "enqueue ability level failed", "", 1.0)
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"log_id": log.LogID, "job_id": jobID})
+			writeJSON(w, r, http.StatusOK, map[string]any{"log_id": log.LogID, "job_id": jobID})
 		case http.MethodGet:
 			userID := r.URL.Query().Get("user_id")
 			if userID == "" {
-				http.Error(w, "user_id required", http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", "user_id required", "", 1.0)
 				return
 			}
 			from, err := parseRangeTime(r.URL.Query().Get("from"), false)
 			if err != nil {
-				http.Error(w, "invalid from", http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", "invalid from", "", 1.0)
 				return
 			}
 			to, err := parseRangeTime(r.URL.Query().Get("to"), true)
 			if err != nil {
-				http.Error(w, "invalid to", http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", "invalid to", "", 1.0)
 				return
 			}
 			if from.IsZero() {
@@ -548,24 +564,24 @@ func NewHTTPServer(
 			}
 			logs, err := trainingStore.ListTrainingLogs(r.Context(), userID, from, to)
 			if err != nil {
-				http.Error(w, "list training logs failed", http.StatusInternalServerError)
+				writeError(w, r, http.StatusInternalServerError, "", "list training logs failed", "", 1.0)
 				return
 			}
-			writeJSON(w, http.StatusOK, logs)
+			writeJSON(w, r, http.StatusOK, logs)
 		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 		}
 	}))
 
 	srv.HandlePrefix("/internal/v1/training/logs/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if trainingStore == nil {
-			http.Error(w, "training subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "training subsystem unavailable", "", 1.0)
 			return
 		}
 		path := strings.TrimPrefix(r.URL.Path, "/internal/v1/training/logs/")
 		logID := strings.TrimSuffix(path, "/")
 		if logID == "" {
-			http.NotFound(w, r)
+			writeError(w, r, http.StatusNotFound, "", "not found", "", 1.0)
 			return
 		}
 
@@ -573,243 +589,249 @@ func NewHTTPServer(
 		case http.MethodPut:
 			var req trainingLogRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-				http.Error(w, "bad request", http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", "bad request", "", 1.0)
 				return
 			}
 			log, start, end, err := buildTrainingLog(req)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
+				writeError(w, r, http.StatusBadRequest, "", err.Error(), "", 1.0)
 				return
 			}
 			conflict, err := trainingStore.HasTrainingConflict(r.Context(), req.UserID, start, end, logID)
 			if err != nil {
-				http.Error(w, "conflict check failed", http.StatusInternalServerError)
+				writeError(w, r, http.StatusInternalServerError, "", "conflict check failed", "", 1.0)
 				return
 			}
 			if conflict {
-				http.Error(w, "training time conflict", http.StatusConflict)
+				writeError(w, r, http.StatusConflict, "", "training time conflict", "", 1.0)
 				return
 			}
 			log.LogID = logID
 			log.Source = "manual"
 			if err := trainingStore.UpdateTrainingLog(r.Context(), log); err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
-					http.Error(w, "training log not found", http.StatusNotFound)
+					writeError(w, r, http.StatusNotFound, "", "training log not found", "", 1.0)
 					return
 				}
-				http.Error(w, "update training log failed", http.StatusInternalServerError)
+				writeError(w, r, http.StatusInternalServerError, "", "update training log failed", "", 1.0)
 				return
 			}
 			jobID, err := enqueueBaselineRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, "training_update", log.LogID)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				writeError(w, r, http.StatusServiceUnavailable, "", err.Error(), "", 1.0)
 				return
 			}
 			if abilityEnqueuer == nil {
-				http.Error(w, "ability level subsystem unavailable", http.StatusServiceUnavailable)
+				writeError(w, r, http.StatusServiceUnavailable, "", "ability level subsystem unavailable", "", 1.0)
 				return
 			}
 			if _, err := abilityEnqueuer.EnqueueAbilityLevelCalc(r.Context(), log.UserID, "training_update", log.LogID); err != nil {
-				http.Error(w, "enqueue ability level failed", http.StatusServiceUnavailable)
+				writeError(w, r, http.StatusServiceUnavailable, "", "enqueue ability level failed", "", 1.0)
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"log_id": log.LogID, "job_id": jobID})
+			writeJSON(w, r, http.StatusOK, map[string]any{"log_id": log.LogID, "job_id": jobID})
 		case http.MethodDelete:
 			log, err := trainingStore.GetTrainingLog(r.Context(), logID)
 			if err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
-					http.Error(w, "training log not found", http.StatusNotFound)
+					writeError(w, r, http.StatusNotFound, "", "training log not found", "", 1.0)
 					return
 				}
-				http.Error(w, "training log not found", http.StatusNotFound)
+				writeError(w, r, http.StatusNotFound, "", "training log not found", "", 1.0)
 				return
 			}
 			if err := trainingStore.SoftDeleteTrainingLog(r.Context(), logID); err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
-					http.Error(w, "training log not found", http.StatusNotFound)
+					writeError(w, r, http.StatusNotFound, "", "training log not found", "", 1.0)
 					return
 				}
-				http.Error(w, "delete training log failed", http.StatusInternalServerError)
+				writeError(w, r, http.StatusInternalServerError, "", "delete training log failed", "", 1.0)
 				return
 			}
 			jobID, err := enqueueBaselineRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, "training_delete", logID)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				writeError(w, r, http.StatusServiceUnavailable, "", err.Error(), "", 1.0)
 				return
 			}
 			if abilityEnqueuer == nil {
-				http.Error(w, "ability level subsystem unavailable", http.StatusServiceUnavailable)
+				writeError(w, r, http.StatusServiceUnavailable, "", "ability level subsystem unavailable", "", 1.0)
 				return
 			}
 			if _, err := abilityEnqueuer.EnqueueAbilityLevelCalc(r.Context(), log.UserID, "training_delete", logID); err != nil {
-				http.Error(w, "enqueue ability level failed", http.StatusServiceUnavailable)
+				writeError(w, r, http.StatusServiceUnavailable, "", "enqueue ability level failed", "", 1.0)
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]any{"log_id": logID, "job_id": jobID})
+			writeJSON(w, r, http.StatusOK, map[string]any{"log_id": logID, "job_id": jobID})
 		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 		}
 	}))
 
 	srv.Handle("/internal/v1/recommendations/generate", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if recService == nil {
-			http.Error(w, "recommendation subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "recommendation subsystem unavailable", "", 1.0)
 			return
 		}
 		if profileStore == nil {
-			http.Error(w, "user profile subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "user profile subsystem unavailable", "", 1.0)
 			return
 		}
 		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 			return
 		}
 		var req recommendationGenerateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "bad request", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "bad request", "", 1.0)
 			return
 		}
 		if req.UserID == "" {
-			http.Error(w, "user_id required", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "user_id required", "", 1.0)
 			return
 		}
 		profile, err := profileStore.GetUserProfile(r.Context(), req.UserID)
 		if err != nil {
-			http.Error(w, "user profile not found", http.StatusNotFound)
+			writeError(w, r, http.StatusNotFound, "", "user profile not found", "", 1.0)
 			return
 		}
 		if profile.AbilityLevel == "" {
 			if abilityEnqueuer == nil {
-				http.Error(w, "ability level subsystem unavailable", http.StatusServiceUnavailable)
+				writeError(w, r, http.StatusServiceUnavailable, "dependency_unavailable", "ability level subsystem unavailable", "ability_level_not_ready", 1.0)
 				return
 			}
 			_, _ = abilityEnqueuer.EnqueueAbilityLevelCalc(r.Context(), req.UserID, "recommendation", req.UserID)
-			http.Error(w, "ability_level_not_ready", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "dependency_unavailable", "ability_level_not_ready", "ability_level_not_ready", 1.0)
 			return
 		}
 		rec, err := recService.Generate(r.Context(), req.UserID)
 		if err != nil {
-			http.Error(w, "generate recommendation failed", http.StatusInternalServerError)
+			if errors.Is(err, recommendation.ErrAbilityLevelNotReady) {
+				writeError(w, r, http.StatusServiceUnavailable, "dependency_unavailable", "ability_level_not_ready", "ability_level_not_ready", 1.0)
+				return
+			}
+			writeError(w, r, http.StatusInternalServerError, "", "generate recommendation failed", "", 1.0)
 			return
 		}
-		writeJSON(w, http.StatusOK, formatRecommendationResponse(rec))
+		fallbackReason, confidence := recommendationFallbackMeta(rec)
+		writeSuccess(w, r, http.StatusOK, formatRecommendationResponse(rec), fallbackReason, confidence)
 	}))
 
 	srv.Handle("/internal/v1/recommendations/latest", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if recService == nil {
-			http.Error(w, "recommendation subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "recommendation subsystem unavailable", "", 1.0)
 			return
 		}
 		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 			return
 		}
 		userID := r.URL.Query().Get("user_id")
 		if userID == "" {
-			http.Error(w, "user_id required", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "user_id required", "", 1.0)
 			return
 		}
 		rec, err := recService.GetLatest(r.Context(), userID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				http.Error(w, "recommendation not found", http.StatusNotFound)
+				writeError(w, r, http.StatusNotFound, "", "recommendation not found", "", 1.0)
 				return
 			}
-			http.Error(w, "get recommendation failed", http.StatusInternalServerError)
+			writeError(w, r, http.StatusInternalServerError, "", "get recommendation failed", "", 1.0)
 			return
 		}
-		writeJSON(w, http.StatusOK, formatRecommendationResponse(rec))
+		fallbackReason, confidence := recommendationFallbackMeta(rec)
+		writeSuccess(w, r, http.StatusOK, formatRecommendationResponse(rec), fallbackReason, confidence)
 	}))
 
 	srv.HandlePrefix("/internal/v1/recommendations/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if recService == nil {
-			http.Error(w, "recommendation subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "recommendation subsystem unavailable", "", 1.0)
 			return
 		}
 		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 			return
 		}
 		path := strings.TrimPrefix(r.URL.Path, "/internal/v1/recommendations/")
 		if !strings.HasSuffix(path, "/feedback") {
-			http.NotFound(w, r)
+			writeError(w, r, http.StatusNotFound, "", "not found", "", 1.0)
 			return
 		}
 		recID := strings.TrimSuffix(path, "/feedback")
 		recID = strings.TrimSuffix(recID, "/")
 		if recID == "" {
-			http.NotFound(w, r)
+			writeError(w, r, http.StatusNotFound, "", "not found", "", 1.0)
 			return
 		}
 
 		var req recommendationFeedbackRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "bad request", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "bad request", "", 1.0)
 			return
 		}
 		if req.UserID == "" || req.Useful == "" {
-			http.Error(w, "user_id/useful required", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "user_id/useful required", "", 1.0)
 			return
 		}
 		if err := recService.Feedback(r.Context(), recID, req.UserID, req.Useful, req.Reason); err != nil {
 			if errors.Is(err, recommendation.ErrFeedbackExists) {
-				http.Error(w, "feedback exists", http.StatusConflict)
+				writeError(w, r, http.StatusConflict, "", "feedback exists", "", 1.0)
 				return
 			}
-			http.Error(w, "submit feedback failed", http.StatusInternalServerError)
+			writeError(w, r, http.StatusInternalServerError, "", "submit feedback failed", "", 1.0)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"rec_id": recID})
+		writeJSON(w, r, http.StatusOK, map[string]any{"rec_id": recID})
 	}))
 
 	srv.Handle("/internal/v1/baseline/current", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if baselineStore == nil {
-			http.Error(w, "baseline subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "baseline subsystem unavailable", "", 1.0)
 			return
 		}
 		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 			return
 		}
 		userID := r.URL.Query().Get("user_id")
 		if userID == "" {
-			http.Error(w, "user_id required", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "user_id required", "", 1.0)
 			return
 		}
 		current, err := baselineStore.GetBaselineCurrent(r.Context(), userID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				http.Error(w, "baseline not found", http.StatusNotFound)
+				writeError(w, r, http.StatusNotFound, "", "baseline not found", "", 1.0)
 				return
 			}
-			http.Error(w, "get baseline failed", http.StatusInternalServerError)
+			writeError(w, r, http.StatusInternalServerError, "", "get baseline failed", "", 1.0)
 			return
 		}
-		writeJSON(w, http.StatusOK, current)
+		writeJSON(w, r, http.StatusOK, current)
 	}))
 
 	srv.Handle("/internal/v1/baseline/history", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if baselineStore == nil {
-			http.Error(w, "baseline subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "baseline subsystem unavailable", "", 1.0)
 			return
 		}
 		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 			return
 		}
 		userID := r.URL.Query().Get("user_id")
 		if userID == "" {
-			http.Error(w, "user_id required", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "user_id required", "", 1.0)
 			return
 		}
 		from, err := parseRangeTime(r.URL.Query().Get("from"), false)
 		if err != nil {
-			http.Error(w, "invalid from", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "invalid from", "", 1.0)
 			return
 		}
 		to, err := parseRangeTime(r.URL.Query().Get("to"), true)
 		if err != nil {
-			http.Error(w, "invalid to", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "invalid to", "", 1.0)
 			return
 		}
 		if from.IsZero() {
@@ -820,34 +842,34 @@ func NewHTTPServer(
 		}
 		histories, err := baselineStore.ListBaselineHistory(r.Context(), userID, from, to)
 		if err != nil {
-			http.Error(w, "list baseline history failed", http.StatusInternalServerError)
+			writeError(w, r, http.StatusInternalServerError, "", "list baseline history failed", "", 1.0)
 			return
 		}
-		writeJSON(w, http.StatusOK, histories)
+		writeJSON(w, r, http.StatusOK, histories)
 	}))
 
 	srv.Handle("/internal/v1/training/summaries", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if baselineStore == nil {
-			http.Error(w, "training summary subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "training summary subsystem unavailable", "", 1.0)
 			return
 		}
 		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 			return
 		}
 		userID := r.URL.Query().Get("user_id")
 		if userID == "" {
-			http.Error(w, "user_id required", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "user_id required", "", 1.0)
 			return
 		}
 		from, err := parseRangeTime(r.URL.Query().Get("from"), false)
 		if err != nil {
-			http.Error(w, "invalid from", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "invalid from", "", 1.0)
 			return
 		}
 		to, err := parseRangeTime(r.URL.Query().Get("to"), true)
 		if err != nil {
-			http.Error(w, "invalid to", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "invalid to", "", 1.0)
 			return
 		}
 		if from.IsZero() {
@@ -858,32 +880,32 @@ func NewHTTPServer(
 		}
 		summaries, err := baselineStore.ListTrainingSummaries(r.Context(), userID, from, to)
 		if err != nil {
-			http.Error(w, "list training summaries failed", http.StatusInternalServerError)
+			writeError(w, r, http.StatusInternalServerError, "", "list training summaries failed", "", 1.0)
 			return
 		}
-		writeJSON(w, http.StatusOK, formatTrainingSummaries(summaries))
+		writeJSON(w, r, http.StatusOK, formatTrainingSummaries(summaries))
 	}))
 
 	srv.Handle("/internal/v1/training/feedback", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if baselineStore == nil {
-			http.Error(w, "training feedback subsystem unavailable", http.StatusServiceUnavailable)
+			writeError(w, r, http.StatusServiceUnavailable, "", "training feedback subsystem unavailable", "", 1.0)
 			return
 		}
 		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
 			return
 		}
 		var req trainingFeedbackRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "bad request", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "bad request", "", 1.0)
 			return
 		}
 		if req.UserID == "" || req.SourceType == "" || req.SourceID == "" || req.Content == "" {
-			http.Error(w, "user_id/source_type/source_id/content required", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "user_id/source_type/source_id/content required", "", 1.0)
 			return
 		}
 		if req.SourceType != "log" && req.SourceType != "activity" {
-			http.Error(w, "source_type invalid", http.StatusBadRequest)
+			writeError(w, r, http.StatusBadRequest, "", "source_type invalid", "", 1.0)
 			return
 		}
 		logID := ""
@@ -899,19 +921,91 @@ func NewHTTPServer(
 			Content:    req.Content,
 		}
 		if err := baselineStore.CreateTrainingFeedback(r.Context(), feedback); err != nil {
-			http.Error(w, "create training feedback failed", http.StatusInternalServerError)
+			writeError(w, r, http.StatusInternalServerError, "", "create training feedback failed", "", 1.0)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"feedback_id": feedback.FeedbackID})
+		writeJSON(w, r, http.StatusOK, map[string]any{"feedback_id": feedback.FeedbackID})
 	}))
 
 	return srv
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
+func writeJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
+	writeSuccess(w, r, status, v, "", 1.0)
+}
+
+func writeSuccess(w http.ResponseWriter, r *http.Request, status int, data any, fallbackReason string, confidence float64) {
+	meta := buildMeta(w, r, fallbackReason, confidence)
+	writeEnvelope(w, status, data, nil, meta)
+}
+
+func writeError(w http.ResponseWriter, r *http.Request, status int, code string, message string, fallbackReason string, confidence float64) {
+	if code == "" {
+		code = errorCodeForStatus(status)
+	}
+	meta := buildMeta(w, r, fallbackReason, confidence)
+	writeEnvelope(w, status, nil, &responseError{Code: code, Message: message}, meta)
+}
+
+func writeEnvelope(w http.ResponseWriter, status int, data any, errResp *responseError, meta responseMeta) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(responseEnvelope{
+		Data:  data,
+		Error: errResp,
+		Meta:  meta,
+	})
+}
+
+func buildMeta(w http.ResponseWriter, r *http.Request, fallbackReason string, confidence float64) responseMeta {
+	if confidence <= 0 {
+		confidence = 1.0
+	}
+	return responseMeta{
+		RequestID:      ensureRequestID(w, r),
+		Timestamp:      time.Now().UTC().Format(time.RFC3339),
+		FallbackReason: fallbackReason,
+		Confidence:     confidence,
+	}
+}
+
+func ensureRequestID(w http.ResponseWriter, r *http.Request) string {
+	requestID := ""
+	if r != nil {
+		requestID = r.Header.Get("X-Request-Id")
+		if requestID == "" {
+			requestID = r.Header.Get("X-Request-ID")
+		}
+	}
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+	w.Header().Set("X-Request-Id", requestID)
+	return requestID
+}
+
+func errorCodeForStatus(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "bad_request"
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusConflict:
+		return "conflict"
+	case http.StatusServiceUnavailable:
+		return "dependency_unavailable"
+	case http.StatusInternalServerError:
+		return "internal_error"
+	default:
+		if status >= 500 {
+			return "internal_error"
+		}
+		return "bad_request"
+	}
 }
 
 func formatRecommendationResponse(rec storage.Recommendation) map[string]any {
@@ -929,6 +1023,36 @@ func formatRecommendationResponse(rec storage.Recommendation) map[string]any {
 		"ai_model":            rec.AIModel,
 		"prompt_version":      rec.PromptVersion,
 		"engine_version":      rec.EngineVersion,
+	}
+}
+
+func recommendationFallbackMeta(rec storage.Recommendation) (string, float64) {
+	if hasOverrideReason(rec.OverrideJSON) {
+		return "safety_override", 0.6
+	}
+	if rec.IsFallback {
+		return "ai_unavailable", 0.4
+	}
+	return "", 1.0
+}
+
+func hasOverrideReason(raw []byte) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return false
+	}
+	reason, ok := payload["reason"]
+	if !ok {
+		return false
+	}
+	switch v := reason.(type) {
+	case string:
+		return v != ""
+	default:
+		return true
 	}
 }
 

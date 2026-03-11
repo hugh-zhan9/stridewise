@@ -56,6 +56,29 @@ func (recServiceStubAbility) Feedback(_ context.Context, _ string, _ string, _ s
 	return nil
 }
 
+type recServiceFallbackStub struct{}
+
+func (recServiceFallbackStub) Generate(_ context.Context, _ string) (storage.Recommendation, error) {
+	return storage.Recommendation{
+		RecID:        "r1",
+		UserID:       "u1",
+		OverrideJSON: []byte(`{}`),
+		IsFallback:   true,
+	}, nil
+}
+
+func (recServiceFallbackStub) GetLatest(_ context.Context, _ string) (storage.Recommendation, error) {
+	return storage.Recommendation{
+		RecID:        "r1",
+		UserID:       "u1",
+		OverrideJSON: []byte(`{}`),
+		IsFallback:   true,
+	}, nil
+}
+
+func (recServiceFallbackStub) Feedback(_ context.Context, _ string, _ string, _ string, _ string) error {
+	return nil
+}
 
 func TestGenerateRecommendation_BlocksWithoutAbilityLevel(t *testing.T) {
 	store := &recStoreStub{profile: storage.UserProfile{UserID: "u1"}}
@@ -78,5 +101,33 @@ func TestGenerateRecommendation_BlocksWithoutAbilityLevel(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "ability_level_not_ready") {
 		t.Fatalf("expected ability_level_not_ready message")
+	}
+}
+
+func TestGenerateRecommendationFallbackMeta(t *testing.T) {
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, profileStoreStub{}, nil, nil, nil, nil, nil, nil, recServiceFallbackStub{})
+	body := map[string]any{"user_id": "u1"}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/internal/v1/recommendations/generate", bytes.NewReader(b))
+	req.Header.Set("X-Internal-Token", "token")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	meta, ok := resp["meta"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected meta in response")
+	}
+	if meta["fallback_reason"] != "ai_unavailable" {
+		t.Fatalf("expected ai_unavailable fallback, got %v", meta["fallback_reason"])
+	}
+	if meta["confidence"] != 0.4 {
+		t.Fatalf("expected confidence 0.4, got %v", meta["confidence"])
 	}
 }

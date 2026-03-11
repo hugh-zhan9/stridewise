@@ -100,3 +100,20 @@ func TestListTrainingSummariesResponseSnakeCase(t *testing.T) {
 		t.Fatalf("expected snake_case fields, got %s", body)
 	}
 }
+
+func TestResponseEnvelopeSuccess(t *testing.T) {
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, nil, nil, &baselineStoreStub{}, nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/v1/training/summaries?user_id=u1", nil)
+	req.Header.Set("X-Internal-Token", "token")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "\"data\"") || !strings.Contains(body, "\"meta\"") {
+		t.Fatalf("expected envelope, got %s", body)
+	}
+}
