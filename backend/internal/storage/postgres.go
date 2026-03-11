@@ -26,32 +26,32 @@ type SyncJob struct {
 }
 
 type UserProfile struct {
-	UserID         string
-	Gender         string
-	Age            int
-	HeightCM       int
-	WeightKG       int
-	GoalType       string
-	GoalCycle      string
-	GoalFrequency  int
-	GoalPace       string
-	FitnessLevel   string
-	AbilityLevel   string
-	AbilityLevelReason string
+	UserID                string
+	Gender                string
+	Age                   int
+	HeightCM              int
+	WeightKG              int
+	GoalType              string
+	GoalCycle             string
+	GoalFrequency         int
+	GoalPace              string
+	FitnessLevel          string
+	AbilityLevel          string
+	AbilityLevelReason    string
 	AbilityLevelUpdatedAt *time.Time
-	RunningYears   string
-	WeeklySessions string
-	WeeklyDistanceKM string
-	LongestRunKM   string
-	RecentDiscomfort string
-	LocationLat    float64
-	LocationLng    float64
-	Country        string
-	Province       string
-	City           string
-	LocationSource string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	RunningYears          string
+	WeeklySessions        string
+	WeeklyDistanceKM      string
+	LongestRunKM          string
+	RecentDiscomfort      string
+	LocationLat           float64
+	LocationLng           float64
+	Country               string
+	Province              string
+	City                  string
+	LocationSource        string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
 }
 
 type WeatherSnapshot struct {
@@ -680,6 +680,21 @@ func (s *PostgresStore) CreateTrainingFeedback(ctx context.Context, feedback Tra
 		VALUES ($1,$2,$3,$4,$5,$6,NOW())
 	`, feedback.FeedbackID, feedback.UserID, feedback.SourceType, feedback.SourceID, feedback.LogID, feedback.Content)
 	return err
+}
+
+func (s *PostgresStore) GetLatestTrainingFeedback(ctx context.Context, userID string) (TrainingFeedback, error) {
+	var out TrainingFeedback
+	err := s.pool.QueryRow(ctx, `
+		SELECT feedback_id, user_id, source_type, source_id, log_id, content, deleted_at, created_at
+		FROM training_feedbacks
+		WHERE user_id=$1 AND deleted_at IS NULL AND content <> ''
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, userID).Scan(
+		&out.FeedbackID, &out.UserID, &out.SourceType, &out.SourceID, &out.LogID,
+		&out.Content, &out.DeletedAt, &out.CreatedAt,
+	)
+	return out, err
 }
 
 func (s *PostgresStore) SoftDeleteTrainingSummaryBySource(ctx context.Context, sourceType, sourceID string) error {

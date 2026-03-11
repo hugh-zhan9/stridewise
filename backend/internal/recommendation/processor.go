@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"stridewise/backend/internal/ai"
 	"stridewise/backend/internal/storage"
@@ -28,15 +28,17 @@ type Store interface {
 	UpsertWeatherForecasts(ctx context.Context, forecasts []storage.WeatherForecast) error
 	GetRecentTrainingSummary(ctx context.Context, userID string, from time.Time, to time.Time) (storage.TrainingLoadSummary, error)
 	GetLatestTrainingDiscomfort(ctx context.Context, userID string) (bool, error)
+	GetLatestTrainingFeedback(ctx context.Context, userID string) (storage.TrainingFeedback, error)
+	GetTrainingSummaryBySource(ctx context.Context, sourceType, sourceID string) (storage.TrainingSummary, error)
 }
 
 type Processor struct {
-	store     Store
-	provider  weather.Provider
+	store       Store
+	provider    weather.Provider
 	recommender ai.Recommender
-	now       func() time.Time
-	aiProvider string
-	aiModel    string
+	now         func() time.Time
+	aiProvider  string
+	aiModel     string
 }
 
 var ErrFeedbackExists = errors.New("recommendation feedback exists")
@@ -86,6 +88,7 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 	forecastInputs := p.fetchForecasts(ctx, userID, location)
 	loadSummary, _ := p.store.GetRecentTrainingSummary(ctx, userID, now.Add(-7*24*time.Hour), now)
 	hasDiscomfort, _ := p.store.GetLatestTrainingDiscomfort(ctx, userID)
+	latestFeedback := p.fetchLatestTrainingFeedback(ctx, userID)
 
 	recoveryStatus := CalcRecoveryStatus(maxFloat(baseline.ACWRSRPE, baseline.ACWRDistance), baseline.Monotony)
 	constraints := ai.RecommendationConstraints{
@@ -107,18 +110,18 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 			City:         profile.City,
 		},
 		Baseline: ai.RecommendationBaseline{
-			Status:             baseline.Status,
-			AcuteLoadSRPE:      baseline.AcuteLoadSRPE,
-			ChronicLoadSRPE:    baseline.ChronicLoadSRPE,
-			ACWRSRPE:           baseline.ACWRSRPE,
-			AcuteLoadDistance:  baseline.AcuteLoadDistance,
+			Status:              baseline.Status,
+			AcuteLoadSRPE:       baseline.AcuteLoadSRPE,
+			ChronicLoadSRPE:     baseline.ChronicLoadSRPE,
+			ACWRSRPE:            baseline.ACWRSRPE,
+			AcuteLoadDistance:   baseline.AcuteLoadDistance,
 			ChronicLoadDistance: baseline.ChronicLoadDistance,
-			ACWRDistance:       baseline.ACWRDistance,
-			Monotony:           baseline.Monotony,
-			Strain:             baseline.Strain,
-			PaceAvgSecPerKM:    baseline.PaceAvgSecPerKM,
-			PaceLowSecPerKM:    baseline.PaceLowSecPerKM,
-			PaceHighSecPerKM:   baseline.PaceHighSecPerKM,
+			ACWRDistance:        baseline.ACWRDistance,
+			Monotony:            baseline.Monotony,
+			Strain:              baseline.Strain,
+			PaceAvgSecPerKM:     baseline.PaceAvgSecPerKM,
+			PaceLowSecPerKM:     baseline.PaceLowSecPerKM,
+			PaceHighSecPerKM:    baseline.PaceHighSecPerKM,
 		},
 		Weather: ai.RecommendationWeather{
 			TemperatureC:      weatherInput.TemperatureC,
@@ -136,9 +139,10 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 			Distance: loadSummary.Distance,
 			Duration: loadSummary.Duration,
 		},
-		Constraints: constraints,
-		CurrentTime: now,
-		RecoveryStatus: recoveryStatus,
+		Constraints:            constraints,
+		CurrentTime:            now,
+		RecoveryStatus:         recoveryStatus,
+		LatestTrainingFeedback: latestFeedback,
 	}
 
 	output, isFallback := p.callAI(ctx, input, weatherErr)
@@ -147,9 +151,9 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		isFallback = true
 	}
 	ruleResult := ApplyRules(RuleInput{
-		WeatherRisk:   string(weatherRisk),
-		HasDiscomfort: hasDiscomfort,
-		HighLoad:      isHighLoad(baseline),
+		WeatherRisk:    string(weatherRisk),
+		HasDiscomfort:  hasDiscomfort,
+		HighLoad:       isHighLoad(baseline),
 		RecoveryStatus: recoveryStatus,
 	}, output)
 
@@ -402,6 +406,40 @@ func (p *Processor) fetchForecasts(ctx context.Context, userID string, location 
 	}
 	_ = p.store.UpsertWeatherForecasts(ctx, storageForecasts)
 	return forecasts
+}
+
+func (p *Processor) fetchLatestTrainingFeedback(ctx context.Context, userID string) *ai.RecommendationTrainingFeedback {
+	if p.store == nil {
+		return nil
+	}
+	feedback, err := p.store.GetLatestTrainingFeedback(ctx, userID)
+	if err != nil {
+		return nil
+	}
+	if strings.TrimSpace(feedback.Content) == "" {
+		return nil
+	}
+	summary, err := p.store.GetTrainingSummaryBySource(ctx, feedback.SourceType, feedback.SourceID)
+	summaryInput := &ai.RecommendationTrainingSummary{}
+	if err == nil {
+		summaryInput.CompletionRate = summary.CompletionRate
+		summaryInput.IntensityMatch = summary.IntensityMatch
+		summaryInput.RecoveryAdvice = summary.RecoveryAdvice
+		summaryInput.AnomalyNotes = summary.AnomalyNotes
+		summaryInput.PerformanceNotes = summary.PerformanceNotes
+		summaryInput.NextSuggestion = summary.NextSuggestion
+	}
+	createdAt := ""
+	if !feedback.CreatedAt.IsZero() {
+		createdAt = feedback.CreatedAt.UTC().Format(time.RFC3339)
+	}
+	return &ai.RecommendationTrainingFeedback{
+		SourceType: feedback.SourceType,
+		SourceID:   feedback.SourceID,
+		CreatedAt:  createdAt,
+		Content:    feedback.Content,
+		Summary:    summaryInput,
+	}
 }
 
 func isHighLoad(b storage.BaselineCurrent) bool {

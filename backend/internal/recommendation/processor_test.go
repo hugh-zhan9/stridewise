@@ -13,12 +13,14 @@ import (
 )
 
 type fakeStore struct {
-	created bool
-	lastRec storage.Recommendation
-	profile storage.UserProfile
-	baseline storage.BaselineCurrent
-	loadSummary storage.TrainingLoadSummary
-	hasDiscomfort bool
+	created        bool
+	lastRec        storage.Recommendation
+	profile        storage.UserProfile
+	baseline       storage.BaselineCurrent
+	loadSummary    storage.TrainingLoadSummary
+	hasDiscomfort  bool
+	latestFeedback storage.TrainingFeedback
+	latestSummary  storage.TrainingSummary
 }
 
 func (f *fakeStore) CreateRecommendation(_ context.Context, rec storage.Recommendation) error {
@@ -43,14 +45,16 @@ func (f *fakeStore) GetBaselineCurrent(_ context.Context, _ string) (storage.Bas
 		return f.baseline, nil
 	}
 	return storage.BaselineCurrent{
-		UserID:          "u1",
-		ACWRSRPE:        1.6,
-		ACWRDistance:    1.2,
-		Monotony:        1.0,
+		UserID:       "u1",
+		ACWRSRPE:     1.6,
+		ACWRDistance: 1.2,
+		Monotony:     1.0,
 	}, nil
 }
 
-func (f *fakeStore) CreateWeatherSnapshot(_ context.Context, _ storage.WeatherSnapshot) error { return nil }
+func (f *fakeStore) CreateWeatherSnapshot(_ context.Context, _ storage.WeatherSnapshot) error {
+	return nil
+}
 func (f *fakeStore) GetLatestWeatherSnapshot(_ context.Context, _ string) (storage.WeatherSnapshot, error) {
 	return storage.WeatherSnapshot{}, nil
 }
@@ -72,6 +76,14 @@ func (f *fakeStore) GetLatestTrainingDiscomfort(_ context.Context, _ string) (bo
 
 func (f *fakeStore) CreateRecommendationFeedback(_ context.Context, _ storage.RecommendationFeedback) error {
 	return nil
+}
+
+func (f *fakeStore) GetLatestTrainingFeedback(_ context.Context, _ string) (storage.TrainingFeedback, error) {
+	return f.latestFeedback, nil
+}
+
+func (f *fakeStore) GetTrainingSummaryBySource(_ context.Context, _ string, _ string) (storage.TrainingSummary, error) {
+	return f.latestSummary, nil
 }
 
 type fakeAI struct{}
@@ -159,25 +171,75 @@ func TestGenerateRecommendation(t *testing.T) {
 	}
 }
 
+func TestGenerateRecommendation_IncludesLatestTrainingFeedback(t *testing.T) {
+	store := &fakeStore{
+		profile: storage.UserProfile{
+			UserID:       "u1",
+			LocationLat:  1,
+			LocationLng:  2,
+			Country:      "CN",
+			Province:     "SH",
+			City:         "SH",
+			AbilityLevel: "beginner",
+		},
+		latestFeedback: storage.TrainingFeedback{
+			UserID:     "u1",
+			SourceType: "log",
+			SourceID:   "log-1",
+			Content:    "太累了",
+			CreatedAt:  time.Date(2026, 3, 10, 8, 0, 0, 0, time.UTC),
+		},
+		latestSummary: storage.TrainingSummary{
+			SummaryID:      "s1",
+			UserID:         "u1",
+			SourceType:     "log",
+			SourceID:       "log-1",
+			CompletionRate: "ok",
+		},
+	}
+	p := NewProcessor(store, safeWeather{}, fakeAI{})
+	p.now = func() time.Time { return time.Date(2026, 3, 10, 9, 0, 0, 0, time.UTC) }
+	if _, err := p.Generate(context.Background(), "u1"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	var input ai.RecommendationInput
+	if err := json.Unmarshal(store.lastRec.InputJSON, &input); err != nil {
+		t.Fatalf("unmarshal input: %v", err)
+	}
+	if input.LatestTrainingFeedback == nil {
+		t.Fatalf("expected latest_training_feedback")
+	}
+	if input.LatestTrainingFeedback.Content == "" {
+		t.Fatalf("expected feedback content")
+	}
+	if input.LatestTrainingFeedback.Summary == nil {
+		t.Fatalf("expected summary")
+	}
+	if input.LatestTrainingFeedback.Summary.CompletionRate == "" {
+		t.Fatalf("expected completion_rate")
+	}
+}
+
 func TestGenerateRecommendation_ConservativeTemplate(t *testing.T) {
 	store := &fakeStore{
 		profile: storage.UserProfile{
-			UserID: "u1",
-			LocationLat: 1,
-			LocationLng: 2,
-			Country: "CN",
-			Province: "SH",
-			City: "SH",
-			AbilityLevel: "beginner",
-			RunningYears: "1-3",
-			WeeklySessions: "2-3",
+			UserID:           "u1",
+			LocationLat:      1,
+			LocationLng:      2,
+			Country:          "CN",
+			Province:         "SH",
+			City:             "SH",
+			AbilityLevel:     "beginner",
+			RunningYears:     "1-3",
+			WeeklySessions:   "2-3",
 			WeeklyDistanceKM: "5-15",
-			LongestRunKM: "10",
+			LongestRunKM:     "10",
 			RecentDiscomfort: "no",
 		},
 		baseline: storage.BaselineCurrent{
-			UserID: "u1",
-			Status: "insufficient_data",
+			UserID:         "u1",
+			Status:         "insufficient_data",
 			DataSessions7d: 0,
 		},
 		loadSummary: storage.TrainingLoadSummary{Sessions: 0},
@@ -213,22 +275,22 @@ func TestGenerateRecommendation_ConservativeTemplate(t *testing.T) {
 func TestGenerateRecommendation_ConservativeTemplateDiscomfort(t *testing.T) {
 	store := &fakeStore{
 		profile: storage.UserProfile{
-			UserID: "u1",
-			LocationLat: 1,
-			LocationLng: 2,
-			Country: "CN",
-			Province: "SH",
-			City: "SH",
-			AbilityLevel: "beginner",
-			RunningYears: "1-3",
-			WeeklySessions: "2-3",
+			UserID:           "u1",
+			LocationLat:      1,
+			LocationLng:      2,
+			Country:          "CN",
+			Province:         "SH",
+			City:             "SH",
+			AbilityLevel:     "beginner",
+			RunningYears:     "1-3",
+			WeeklySessions:   "2-3",
 			WeeklyDistanceKM: "5-15",
-			LongestRunKM: "10",
+			LongestRunKM:     "10",
 			RecentDiscomfort: "yes",
 		},
 		baseline: storage.BaselineCurrent{
-			UserID: "u1",
-			Status: "insufficient_data",
+			UserID:         "u1",
+			Status:         "insufficient_data",
 			DataSessions7d: 0,
 		},
 		loadSummary: storage.TrainingLoadSummary{Sessions: 0},

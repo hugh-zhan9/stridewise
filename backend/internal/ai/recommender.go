@@ -10,14 +10,15 @@ type Recommender interface {
 }
 
 type RecommendationInput struct {
-	RequestID string `json:"request_id"`
-	UserProfile RecommendationUserProfile `json:"user_profile"`
-	Baseline   RecommendationBaseline     `json:"baseline"`
-	Weather    RecommendationWeather      `json:"weather"`
-	TrainingLoad7D TrainingLoadSummary    `json:"training_load_7d"`
-	Constraints RecommendationConstraints `json:"constraints"`
-	CurrentTime time.Time                 `json:"current_time"`
-	RecoveryStatus string                 `json:"recovery_status"`
+	RequestID              string                          `json:"request_id"`
+	UserProfile            RecommendationUserProfile       `json:"user_profile"`
+	Baseline               RecommendationBaseline          `json:"baseline"`
+	Weather                RecommendationWeather           `json:"weather"`
+	TrainingLoad7D         TrainingLoadSummary             `json:"training_load_7d"`
+	Constraints            RecommendationConstraints       `json:"constraints"`
+	CurrentTime            time.Time                       `json:"current_time"`
+	RecoveryStatus         string                          `json:"recovery_status"`
+	LatestTrainingFeedback *RecommendationTrainingFeedback `json:"latest_training_feedback,omitempty"`
 }
 
 type RecommendationUserProfile struct {
@@ -32,29 +33,29 @@ type RecommendationUserProfile struct {
 }
 
 type RecommendationBaseline struct {
-	Status           string  `json:"status"`
-	AcuteLoadSRPE    float64 `json:"acute_load_srpe"`
-	ChronicLoadSRPE  float64 `json:"chronic_load_srpe"`
-	ACWRSRPE         float64 `json:"acwr_srpe"`
-	AcuteLoadDistance float64 `json:"acute_load_distance"`
+	Status              string  `json:"status"`
+	AcuteLoadSRPE       float64 `json:"acute_load_srpe"`
+	ChronicLoadSRPE     float64 `json:"chronic_load_srpe"`
+	ACWRSRPE            float64 `json:"acwr_srpe"`
+	AcuteLoadDistance   float64 `json:"acute_load_distance"`
 	ChronicLoadDistance float64 `json:"chronic_load_distance"`
-	ACWRDistance     float64 `json:"acwr_distance"`
-	Monotony         float64 `json:"monotony"`
-	Strain           float64 `json:"strain"`
-	PaceAvgSecPerKM  int     `json:"pace_avg_sec_per_km"`
-	PaceLowSecPerKM  int     `json:"pace_low_sec_per_km"`
-	PaceHighSecPerKM int     `json:"pace_high_sec_per_km"`
+	ACWRDistance        float64 `json:"acwr_distance"`
+	Monotony            float64 `json:"monotony"`
+	Strain              float64 `json:"strain"`
+	PaceAvgSecPerKM     int     `json:"pace_avg_sec_per_km"`
+	PaceLowSecPerKM     int     `json:"pace_low_sec_per_km"`
+	PaceHighSecPerKM    int     `json:"pace_high_sec_per_km"`
 }
 
 type RecommendationWeather struct {
-	TemperatureC      float64 `json:"temperature_c"`
-	FeelsLikeC        float64 `json:"feels_like_c"`
-	Humidity          float64 `json:"humidity"`
-	WindSpeedMS       float64 `json:"wind_speed_ms"`
-	PrecipitationProb float64 `json:"precipitation_prob"`
-	AQI               int     `json:"aqi"`
-	UVIndex           float64 `json:"uv_index"`
-	RiskLevel         string  `json:"risk_level"`
+	TemperatureC      float64                  `json:"temperature_c"`
+	FeelsLikeC        float64                  `json:"feels_like_c"`
+	Humidity          float64                  `json:"humidity"`
+	WindSpeedMS       float64                  `json:"wind_speed_ms"`
+	PrecipitationProb float64                  `json:"precipitation_prob"`
+	AQI               int                      `json:"aqi"`
+	UVIndex           float64                  `json:"uv_index"`
+	RiskLevel         string                   `json:"risk_level"`
 	Forecasts         []RecommendationForecast `json:"forecasts"`
 }
 
@@ -100,16 +101,33 @@ type RecommendationConstraints struct {
 	HighLoad      bool   `json:"high_load"`
 }
 
+type RecommendationTrainingFeedback struct {
+	SourceType string                         `json:"source_type"`
+	SourceID   string                         `json:"source_id"`
+	CreatedAt  string                         `json:"created_at"`
+	Content    string                         `json:"content"`
+	Summary    *RecommendationTrainingSummary `json:"summary"`
+}
+
+type RecommendationTrainingSummary struct {
+	CompletionRate   string `json:"completion_rate"`
+	IntensityMatch   string `json:"intensity_match"`
+	RecoveryAdvice   string `json:"recovery_advice"`
+	AnomalyNotes     string `json:"anomaly_notes"`
+	PerformanceNotes string `json:"performance_notes"`
+	NextSuggestion   string `json:"next_suggestion"`
+}
+
 type RecommendationOutput struct {
-	ShouldRun          bool     `json:"should_run"`
-	WorkoutType        string   `json:"workout_type"`
-	IntensityRange     string   `json:"intensity_range"`
-	TargetVolume       string   `json:"target_volume"`
-	SuggestedTimeWindow string  `json:"suggested_time_window"`
-	RiskLevel          string   `json:"risk_level"`
-	HydrationTip       string   `json:"hydration_tip"`
-	ClothingTip        string   `json:"clothing_tip"`
-	Explanation        []string `json:"explanation"`
+	ShouldRun           bool                               `json:"should_run"`
+	WorkoutType         string                             `json:"workout_type"`
+	IntensityRange      string                             `json:"intensity_range"`
+	TargetVolume        string                             `json:"target_volume"`
+	SuggestedTimeWindow string                             `json:"suggested_time_window"`
+	RiskLevel           string                             `json:"risk_level"`
+	HydrationTip        string                             `json:"hydration_tip"`
+	ClothingTip         string                             `json:"clothing_tip"`
+	Explanation         []string                           `json:"explanation"`
 	AlternativeWorkouts []RecommendationAlternativeWorkout `json:"alternative_workouts"`
 }
 
