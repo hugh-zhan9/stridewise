@@ -68,6 +68,10 @@ func (p *Processor) Aggregate(ctx context.Context, userID string, window string,
 	}, nil
 }
 
+func (p *Processor) GetRollingTrend(ctx context.Context, userID string, window string, asOf time.Time) (TrendResult, error) {
+	return p.Aggregate(ctx, userID, window, asOf)
+}
+
 type dayAgg struct {
 	sessions     int
 	distanceKM   float64

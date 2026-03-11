@@ -16,6 +16,7 @@ import (
 
 	"stridewise/backend/internal/middleware"
 	"stridewise/backend/internal/recommendation"
+	"stridewise/backend/internal/trend"
 	"stridewise/backend/internal/storage"
 	"stridewise/backend/internal/task"
 	"stridewise/backend/internal/training"
@@ -86,6 +87,10 @@ type RecommendationService interface {
 	Generate(ctx context.Context, userID string) (storage.Recommendation, error)
 	GetLatest(ctx context.Context, userID string) (storage.Recommendation, error)
 	Feedback(ctx context.Context, recID string, userID string, useful string, reason string) error
+}
+
+type TrendService interface {
+	GetRollingTrend(ctx context.Context, userID string, window string, asOf time.Time) (trend.TrendResult, error)
 }
 
 type createSyncJobRequest struct {
@@ -201,6 +206,7 @@ func NewHTTPServer(
 	baselineStore BaselineStore,
 	abilityEnqueuer AbilityLevelEnqueuer,
 	recService RecommendationService,
+	trendService TrendService,
 ) *kratoshttp.Server {
 	if addr == "" {
 		addr = ":8000"
@@ -903,6 +909,45 @@ func NewHTTPServer(
 			return
 		}
 		writeJSON(w, r, http.StatusOK, formatTrainingSummaries(summaries))
+	}))
+
+	srv.Handle("/internal/v1/trends", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if trendService == nil {
+			writeError(w, r, http.StatusServiceUnavailable, "", "trend subsystem unavailable", "", 1.0)
+			return
+		}
+		if r.Method != http.MethodGet {
+			writeError(w, r, http.StatusMethodNotAllowed, "", "method not allowed", "", 1.0)
+			return
+		}
+		userID := r.URL.Query().Get("user_id")
+		if userID == "" {
+			writeError(w, r, http.StatusBadRequest, "", "user_id required", "", 1.0)
+			return
+		}
+		window := r.URL.Query().Get("window")
+		if window != "7d" && window != "30d" {
+			writeError(w, r, http.StatusBadRequest, "", "window invalid", "", 1.0)
+			return
+		}
+		asOfInput := r.URL.Query().Get("as_of")
+		asOf := time.Now()
+		if asOfInput != "" {
+			parsed, err := parseRangeTime(asOfInput, true)
+			if err != nil {
+				writeError(w, r, http.StatusBadRequest, "", "as_of invalid", "", 1.0)
+				return
+			}
+			if !parsed.IsZero() {
+				asOf = parsed
+			}
+		}
+		result, err := trendService.GetRollingTrend(r.Context(), userID, window, asOf)
+		if err != nil {
+			writeError(w, r, http.StatusInternalServerError, "", "get trends failed", "", 1.0)
+			return
+		}
+		writeJSON(w, r, http.StatusOK, result)
 	}))
 
 	srv.Handle("/internal/v1/training/feedback", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

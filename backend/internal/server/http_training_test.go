@@ -43,7 +43,7 @@ func TestCreateTrainingLog_Conflict(t *testing.T) {
 	store := &trainingStoreStub{conflict: true}
 	enqueuer := &abilityEnqueuerStub{}
 
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, store, nil, nil, enqueuer, nil)
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, store, nil, nil, enqueuer, nil, nil)
 
 	body := map[string]any{
 		"user_id": "u1",
@@ -70,7 +70,7 @@ func TestUpdateTrainingLog_RejectNonManual(t *testing.T) {
 	enqueuer := &abilityEnqueuerStub{}
 
 	asyncStore := &asyncJobStoreStub{}
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, store, asyncStore, nil, enqueuer, nil)
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, nil, nil, nil, store, asyncStore, nil, enqueuer, nil, nil)
 
 	body := map[string]any{
 		"user_id": "u1",

@@ -15,6 +15,7 @@ import (
 	"stridewise/backend/internal/recommendation"
 	"stridewise/backend/internal/server"
 	"stridewise/backend/internal/storage"
+	"stridewise/backend/internal/trend"
 	"stridewise/backend/internal/weather"
 )
 
@@ -106,6 +107,7 @@ func main() {
 	}
 	recProcessor := recommendation.NewProcessor(store, provider, recommender)
 	recProcessor.SetAIInfo(cfg.AI.Provider, cfg.AI.OpenAI.Model)
+	trendProcessor := trend.NewProcessor(store)
 
 	httpSrv := server.NewHTTPServer(
 		cfg.Server.HTTP.Addr,
@@ -122,6 +124,7 @@ func main() {
 		store,
 		abilityEnqueuer,
 		recProcessor,
+		trendProcessor,
 	)
 	app := kratos.New(
 		kratos.Name("stridewise-api"),

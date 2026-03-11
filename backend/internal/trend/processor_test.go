@@ -66,7 +66,7 @@ func TestAggregateRollingTrend(t *testing.T) {
 	}
 	p := NewProcessor(store)
 
-	out, err := p.Aggregate(context.Background(), "u1", "7d", time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC))
+	out, err := p.GetRollingTrend(context.Background(), "u1", "7d", time.Date(2026, 3, 10, 12, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}

@@ -84,7 +84,7 @@ func TestGenerateRecommendation_BlocksWithoutAbilityLevel(t *testing.T) {
 	store := &recStoreStub{profile: storage.UserProfile{UserID: "u1"}}
 	enqueuer := &abilityEnqueuerStub{}
 
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, nil, nil, nil, store, nil, enqueuer, recServiceStubAbility{})
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, nil, nil, nil, store, nil, enqueuer, recServiceStubAbility{}, nil)
 
 	body := map[string]any{"user_id": "u1"}
 	b, _ := json.Marshal(body)
@@ -105,7 +105,7 @@ func TestGenerateRecommendation_BlocksWithoutAbilityLevel(t *testing.T) {
 }
 
 func TestGenerateRecommendationFallbackMeta(t *testing.T) {
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, profileStoreStub{}, nil, nil, nil, nil, nil, nil, recServiceFallbackStub{})
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, profileStoreStub{}, nil, nil, nil, nil, nil, nil, recServiceFallbackStub{}, nil)
 	body := map[string]any{"user_id": "u1"}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/internal/v1/recommendations/generate", bytes.NewReader(b))

@@ -41,7 +41,7 @@ func TestCreateUserProfile_RequiresLocation(t *testing.T) {
 	provider := weather.NewMockProvider(weather.SnapshotInput{TemperatureC: 20})
 	enqueuer := &abilityEnqueuerStub{}
 
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil)
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil, nil)
 
 	body := map[string]any{
 		"user_id":        "u1",
@@ -69,7 +69,7 @@ func TestCreateUserProfile_PersistsQuestionnaire(t *testing.T) {
 	provider := weather.NewMockProvider(weather.SnapshotInput{TemperatureC: 20})
 	enqueuer := &abilityEnqueuerStub{}
 
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil)
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil, nil)
 
 	body := map[string]any{
 		"user_id":            "u1",
@@ -123,7 +123,7 @@ func TestCreateUserProfile_PersistsRestingHR(t *testing.T) {
 	provider := weather.NewMockProvider(weather.SnapshotInput{TemperatureC: 20})
 	enqueuer := &abilityEnqueuerStub{}
 
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil)
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil, nil)
 
 	body := map[string]any{
 		"user_id":            "u1",
@@ -166,7 +166,7 @@ func TestCreateUserProfile_RejectsManualAbilityLevel(t *testing.T) {
 	provider := weather.NewMockProvider(weather.SnapshotInput{TemperatureC: 20})
 	enqueuer := &abilityEnqueuerStub{}
 
-	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil)
+	srv := NewHTTPServer(":0", "token", nil, nil, nil, nil, store, store, provider, nil, nil, nil, enqueuer, nil, nil)
 
 	body := map[string]any{
 		"user_id":            "u1",

@@ -444,3 +444,19 @@
 - **Changed Files**:
 - (未检测到变更文件或当前目录非 git 仓库)
 ----------------------------------------
+## [2026-03-11 19:59] [Feature]
+- **Change**: 新增滚动趋势接口与处理器适配，修正HTTP Server调用参数
+- **Risk Analysis**: 新增趋势路由与处理器调用，若注入TrendService错误可能导致接口503或数据不完整；同时修改HTTP Server构造参数可能影响现有测试与启动
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/server/http.go`
+- `backend/internal/server/http_trend_test.go`
+- `backend/internal/server/http_baseline_test.go`
+- `backend/internal/server/http_recommendation_ability_test.go`
+- `backend/internal/server/http_recommendation_test.go`
+- `backend/internal/server/http_training_test.go`
+- `backend/internal/server/http_user_weather_test.go`
+- `backend/internal/trend/processor.go`
+- `backend/internal/trend/processor_test.go`
+- `backend/cmd/api/main.go`
+----------------------------------------
