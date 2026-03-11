@@ -99,7 +99,7 @@ func buildOpenAIRecRequest(cfg OpenAIConfig, input RecommendationInput) (openAIR
 		return openAIRequest{}, err
 	}
 	systemPrompt := "你是跑步训练建议助手。请生成结构化建议，确保安全优先。"
-	userPrompt := fmt.Sprintf("请基于以下JSON生成训练建议，仅输出JSON对象，字段必须包含 should_run、workout_type、intensity_range、target_volume、suggested_time_window、risk_level、hydration_tip、clothing_tip、explanation。输入JSON: %s", string(inputJSON))
+	userPrompt := fmt.Sprintf("请基于以下JSON生成训练建议，仅输出JSON对象，字段必须包含 should_run、workout_type、intensity_range、target_volume、suggested_time_window、risk_level、hydration_tip、clothing_tip、explanation（至少 2 条，尽量满足）。输入JSON: %s", string(inputJSON))
 	req := openAIRequest{
 		Model: cfg.Model,
 		Messages: []openAIMessage{
@@ -132,9 +132,6 @@ func validateRecommendationOutput(out RecommendationOutput) error {
 	}
 	if out.RiskLevel == "" {
 		return errors.New("risk_level required")
-	}
-	if len(out.Explanation) < 2 {
-		return errors.New("explanation requires at least 2 items")
 	}
 	return nil
 }

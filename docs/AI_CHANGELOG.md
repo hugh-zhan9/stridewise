@@ -399,3 +399,17 @@
 - `backend/internal/baseline/nightly_test.go`
 - `backend/migrations/009_nightly_baseline_runs.sql`
 ----------------------------------------
+## [2026-03-11 18:43] [Feature]
+- **Change**: 放宽AI建议解释条数校验并更新文档
+- **Risk Analysis**: 移除解释条数硬校验可能导致返回解释较少的建议，影响可解释性，但符合新需求。Schema约束变更可能影响依赖校验的消费方。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/ai/openai_recommender.go`
+- `backend/internal/ai/openai_recommender_test.go`
+- `backend/internal/ai/recommender.go`
+- `backend/internal/recommendation/processor.go`
+- `backend/internal/recommendation/processor_test.go`
+- `docs/plans/2026-03-09-stridewise-openapi-and-json-schema.md`
+- `request.md`
+- `.idea/`
+----------------------------------------

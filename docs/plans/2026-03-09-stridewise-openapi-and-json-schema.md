@@ -13,13 +13,15 @@
 - ~~当前版本：v1.8.0~~
 - ~~当前版本：v1.9.0~~
 - ~~当前版本：v1.10.0~~
-- 当前版本：v1.11.0
+- ~~当前版本：v1.11.0~~
+- 当前版本：v1.12.0
 - 发布日期：2026-03-11
 - 文档状态：可评审
 
 ## 变更记录
 | 版本号 | 日期 | 变更说明 |
 | --- | --- | --- |
+| v1.12.0 | 2026-03-11 | AI 输出解释字段移除 minItems 约束，允许少于 2 条；说明 explanation 条数不作为失败条件。 |
 | v1.11.0 | 2026-03-11 | Profile 增加静息心率；Forecast 增加预测 AQI 字段与来源。 |
 | v1.10.0 | 2026-03-11 | AI 推荐输入新增 latest_training_feedback 字段。 |
 | v1.9.0 | 2026-03-11 | 内部接口响应统一包裹 Envelope，标准化错误与兜底元信息字段。 |
@@ -44,6 +46,7 @@
 - ~~TrainingSummary.training_log_id / plan_match_score / completion_score / recovery_tip / summary_json~~ → 使用结构化字段并新增 `source_type/source_id`
 - ~~Profile 未包含 resting_hr~~ → ProfileInitRequest/ProfileResponse 增加 `resting_hr`（可选）
 - ~~Forecast 未包含 AQI~~ → RecommendationForecast 增加 `aqi`/`aqi_source`
+- ~~AI 输出 explanation 至少 2 条~~ → 解释条数改为期望值，移除 minItems 限制
 
 ## 1. OpenAPI 3.1（MVP 草案）
 - 当前阶段鉴权策略：
@@ -982,7 +985,6 @@ components:
     "risk_level": { "type": "string", "enum": ["green", "yellow", "red"] },
     "explanation": {
       "type": "array",
-      "minItems": 2,
       "maxItems": 6,
       "items": { "type": "string", "maxLength": 300 }
     },
@@ -998,6 +1000,7 @@ components:
 
 ## 4. 校验与落地建议
 - 先做 Schema 校验，再入库。
-- AI 输出若不满足 Schema：直接走 Rule-only fallback。
+- ~~AI 输出若不满足 Schema：直接走 Rule-only fallback。~~
+- AI 输出若不满足 Schema：直接走 Rule-only fallback（explanation 条数不作为失败条件）。
 - AI 输出满足 Schema 但违反硬规则：规则引擎覆盖字段并记录 `override_reason`。
 - 建议在 `recommendation` 表记录 `prompt_version`、`model_name`、`engine_version` 用于回溯。
