@@ -588,6 +588,20 @@ components:
         risk_level: { type: string, enum: [green, yellow, red] }
         hydration_tip: { type: string }
         clothing_tip: { type: string }
+        alternative_workouts:
+          type: array
+          items:
+            type: object
+            required: [type, title]
+            properties:
+              type: { type: string, enum: [treadmill, strength, mobility, rest] }
+              title: { type: string }
+              duration_min: { type: integer }
+              intensity: { type: string, enum: [low, medium] }
+              tips:
+                type: array
+                items: { type: string }
+            additionalProperties: false
         explanation:
           type: array
           items: { type: string }
@@ -859,6 +873,24 @@ components:
     "suggested_time_window": { "type": "string", "maxLength": 100 },
     "hydration_tip": { "type": "string", "maxLength": 300 },
     "clothing_tip": { "type": "string", "maxLength": 300 },
+    "alternative_workouts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "title"],
+        "properties": {
+          "type": { "type": "string", "enum": ["treadmill", "strength", "mobility", "rest"] },
+          "title": { "type": "string", "maxLength": 100 },
+          "duration_min": { "type": "integer", "minimum": 0, "maximum": 180 },
+          "intensity": { "type": "string", "enum": ["low", "medium"] },
+          "tips": {
+            "type": "array",
+            "items": { "type": "string", "maxLength": 200 }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
     "risk_level": { "type": "string", "enum": ["green", "yellow", "red"] },
     "explanation": {
       "type": "array",
