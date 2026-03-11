@@ -85,7 +85,10 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		City:     profile.City,
 	}
 	weatherInput, weatherRisk, weatherErr := p.fetchWeather(ctx, userID, location)
-	forecastInputs := p.fetchForecasts(ctx, userID, location)
+	forecastInputs, forecastErr := p.fetchForecasts(ctx, userID, location)
+	if forecastErr != nil && weatherErr == nil {
+		weatherErr = forecastErr
+	}
 	loadSummary, _ := p.store.GetRecentTrainingSummary(ctx, userID, now.Add(-7*24*time.Hour), now)
 	hasDiscomfort, _ := p.store.GetLatestTrainingDiscomfort(ctx, userID)
 	latestFeedback := p.fetchLatestTrainingFeedback(ctx, userID)
@@ -200,6 +203,7 @@ func mapForecasts(input []weather.ForecastInput) []ai.RecommendationForecast {
 	}
 	out := make([]ai.RecommendationForecast, 0, len(input))
 	for _, f := range input {
+		aqi, source := resolveForecastAQI(f.AQILocal, f.AQIQAQI, f.AQISource)
 		out = append(out, ai.RecommendationForecast{
 			Date:             f.Date.Format("2006-01-02"),
 			TempMaxC:         f.TempMaxC,
@@ -210,6 +214,8 @@ func mapForecasts(input []weather.ForecastInput) []ai.RecommendationForecast {
 			VisibilityKM:     f.VisibilityKM,
 			CloudPct:         f.CloudPct,
 			UVIndex:          f.UVIndex,
+			AQI:              aqi,
+			AQISource:        source,
 			TextDay:          f.TextDay,
 			TextNight:        f.TextNight,
 			IconDay:          f.IconDay,
@@ -231,6 +237,40 @@ func mapForecasts(input []weather.ForecastInput) []ai.RecommendationForecast {
 		})
 	}
 	return out
+}
+
+func ensureForecastAQI(forecasts []weather.ForecastInput) error {
+	for _, f := range forecasts {
+		if f.AQISource == nil || *f.AQISource == "" {
+			return errors.New("forecast aqi source missing")
+		}
+		if f.AQILocal == nil && f.AQIQAQI == nil {
+			return errors.New("forecast aqi missing")
+		}
+		if *f.AQISource == "local" && f.AQILocal == nil {
+			return errors.New("forecast local aqi missing")
+		}
+		if *f.AQISource == "qaqi" && f.AQIQAQI == nil {
+			return errors.New("forecast qaqi missing")
+		}
+	}
+	return nil
+}
+
+func resolveForecastAQI(local *int, qaqi *int, source *string) (int, string) {
+	if source != nil && *source == "local" && local != nil {
+		return *local, "local"
+	}
+	if source != nil && *source == "qaqi" && qaqi != nil {
+		return *qaqi, "qaqi"
+	}
+	if local != nil {
+		return *local, "local"
+	}
+	if qaqi != nil {
+		return *qaqi, "qaqi"
+	}
+	return 0, ""
 }
 
 func formatTimePtr(input *time.Time) *string {
@@ -362,13 +402,16 @@ func (p *Processor) fetchWeather(ctx context.Context, userID string, location we
 	return input, risk, nil
 }
 
-func (p *Processor) fetchForecasts(ctx context.Context, userID string, location weather.Location) []weather.ForecastInput {
+func (p *Processor) fetchForecasts(ctx context.Context, userID string, location weather.Location) ([]weather.ForecastInput, error) {
 	forecasts, err := p.provider.GetForecast(ctx, location)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	if len(forecasts) == 0 {
-		return nil
+		return nil, errors.New("weather forecast empty")
+	}
+	if err := ensureForecastAQI(forecasts); err != nil {
+		return nil, err
 	}
 	storageForecasts := make([]storage.WeatherForecast, 0, len(forecasts))
 	for _, f := range forecasts {
@@ -402,10 +445,13 @@ func (p *Processor) fetchForecasts(ctx context.Context, userID string, location 
 			MoonsetTime:      f.MoonsetTime,
 			MoonPhase:        f.MoonPhase,
 			MoonPhaseIcon:    f.MoonPhaseIcon,
+			AQILocal:         f.AQILocal,
+			AQIQAQI:          f.AQIQAQI,
+			AQISource:        f.AQISource,
 		})
 	}
 	_ = p.store.UpsertWeatherForecasts(ctx, storageForecasts)
-	return forecasts
+	return forecasts, nil
 }
 
 func (p *Processor) fetchLatestTrainingFeedback(ctx context.Context, userID string) *ai.RecommendationTrainingFeedback {

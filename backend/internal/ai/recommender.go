@@ -69,6 +69,8 @@ type RecommendationForecast struct {
 	VisibilityKM     *float64 `json:"visibility_km"`
 	CloudPct         *float64 `json:"cloud_pct"`
 	UVIndex          *float64 `json:"uv_index"`
+	AQI              int      `json:"aqi"`
+	AQISource        string   `json:"aqi_source"`
 	TextDay          *string  `json:"text_day"`
 	TextNight        *string  `json:"text_night"`
 	IconDay          *string  `json:"icon_day"`

@@ -413,3 +413,13 @@
 - `request.md`
 - `.idea/`
 ----------------------------------------
+## [2026-03-11 18:45] [Feature]
+- **Change**: 接入预测AQI并在建议输入中包含来源
+- **Risk Analysis**: 新增 forecast AQI 字段会影响推荐输入结构，若上游天气或测试数据缺失 AQI 可能触发回退路径。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/ai/recommender.go`
+- `backend/internal/recommendation/processor.go`
+- `backend/internal/recommendation/processor_test.go`
+- `.idea/`
+----------------------------------------

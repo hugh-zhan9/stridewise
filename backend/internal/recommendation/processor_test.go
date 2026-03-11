@@ -116,9 +116,13 @@ func (fakeWeather) GetSnapshot(_ context.Context, _ weather.Location) (weather.S
 
 func (fakeWeather) GetForecast(_ context.Context, _ weather.Location) ([]weather.ForecastInput, error) {
 	tempMax := 25.0
+	aqiLocal := 80
+	aqiSource := "local"
 	return []weather.ForecastInput{{
-		Date:     time.Date(2026, 3, 11, 0, 0, 0, 0, time.UTC),
-		TempMaxC: &tempMax,
+		Date:      time.Date(2026, 3, 11, 0, 0, 0, 0, time.UTC),
+		TempMaxC:  &tempMax,
+		AQILocal:  &aqiLocal,
+		AQISource: &aqiSource,
 	}}, nil
 }
 
@@ -137,7 +141,25 @@ func (safeWeather) GetSnapshot(_ context.Context, _ weather.Location) (weather.S
 }
 
 func (safeWeather) GetForecast(_ context.Context, _ weather.Location) ([]weather.ForecastInput, error) {
-	return nil, nil
+	aqiQAQI := 60
+	aqiSource := "qaqi"
+	return []weather.ForecastInput{{
+		Date:      time.Date(2026, 3, 11, 0, 0, 0, 0, time.UTC),
+		AQIQAQI:   &aqiQAQI,
+		AQISource: &aqiSource,
+	}}, nil
+}
+
+type missingAQIWeather struct{}
+
+func (missingAQIWeather) GetSnapshot(_ context.Context, _ weather.Location) (weather.SnapshotInput, error) {
+	return weather.SnapshotInput{TemperatureC: 20, FeelsLikeC: 41}, nil
+}
+
+func (missingAQIWeather) GetForecast(_ context.Context, _ weather.Location) ([]weather.ForecastInput, error) {
+	return []weather.ForecastInput{{
+		Date: time.Date(2026, 3, 11, 0, 0, 0, 0, time.UTC),
+	}}, nil
 }
 
 func TestGenerateRecommendation(t *testing.T) {
@@ -168,6 +190,17 @@ func TestGenerateRecommendation(t *testing.T) {
 	}
 	if _, ok := output["AlternativeWorkouts"]; !ok {
 		t.Fatalf("expected AlternativeWorkouts in output")
+	}
+}
+
+func TestGenerateRecommendation_ForecastAQIMissingFallback(t *testing.T) {
+	store := &fakeStore{}
+	p := NewProcessor(store, missingAQIWeather{}, fakeAI{})
+	if _, err := p.Generate(context.Background(), "u1"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !store.lastRec.IsFallback {
+		t.Fatalf("expected fallback when forecast aqi missing")
 	}
 }
 
