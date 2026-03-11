@@ -371,3 +371,10 @@
 - `backend/internal/sync/processor.go`
 - `backend/internal/sync/processor_test.go`
 ----------------------------------------
+## [2026-03-11 16:19] [Feature]
+- **Change**: 统一内部API响应包裹并补充兜底元信息
+- **Risk Analysis**: 响应结构统一包裹，可能影响调用方解析与测试断言，已在 backend 目录完成 go test ./... 回归。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- (未检测到变更文件或当前目录非 git 仓库)
+----------------------------------------
