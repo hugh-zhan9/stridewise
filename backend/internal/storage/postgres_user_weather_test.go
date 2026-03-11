@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -39,6 +40,11 @@ func TestUserProfileUpsertAndGet(t *testing.T) {
 		City:           "Shanghai",
 		LocationSource: "manual",
 	}
+	setStringField(t, &profile, "RunningYears", "1-3")
+	setStringField(t, &profile, "WeeklySessions", "2-3")
+	setStringField(t, &profile, "WeeklyDistanceKM", "5-15")
+	setStringField(t, &profile, "LongestRunKM", "10")
+	setStringField(t, &profile, "RecentDiscomfort", "no")
 	if err := store.UpsertUserProfile(context.Background(), profile); err != nil {
 		t.Fatalf("upsert failed: %v", err)
 	}
@@ -49,6 +55,11 @@ func TestUserProfileUpsertAndGet(t *testing.T) {
 	if got.LocationLat != 31.2 {
 		t.Fatalf("expected lat 31.2, got %v", got.LocationLat)
 	}
+	assertStringField(t, got, "RunningYears", "1-3")
+	assertStringField(t, got, "WeeklySessions", "2-3")
+	assertStringField(t, got, "WeeklyDistanceKM", "5-15")
+	assertStringField(t, got, "LongestRunKM", "10")
+	assertStringField(t, got, "RecentDiscomfort", "no")
 
 	snapshot := WeatherSnapshot{
 		UserID:            "u1",
@@ -71,5 +82,45 @@ func TestUserProfileUpsertAndGet(t *testing.T) {
 	}
 	if gotSnap.RiskLevel != "green" {
 		t.Fatalf("expected green, got %s", gotSnap.RiskLevel)
+	}
+}
+
+func setStringField(t *testing.T, target any, name string, value string) {
+	t.Helper()
+	v := reflect.ValueOf(target)
+	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
+		t.Fatalf("target must be pointer to struct")
+	}
+	field := v.Elem().FieldByName(name)
+	if !field.IsValid() {
+		t.Fatalf("missing field %s", name)
+	}
+	if field.Kind() != reflect.String {
+		t.Fatalf("field %s not string", name)
+	}
+	if !field.CanSet() {
+		t.Fatalf("field %s not settable", name)
+	}
+	field.SetString(value)
+}
+
+func assertStringField(t *testing.T, target any, name string, expected string) {
+	t.Helper()
+	v := reflect.ValueOf(target)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		t.Fatalf("target must be struct")
+	}
+	field := v.FieldByName(name)
+	if !field.IsValid() {
+		t.Fatalf("missing field %s", name)
+	}
+	if field.Kind() != reflect.String {
+		t.Fatalf("field %s not string", name)
+	}
+	if field.String() != expected {
+		t.Fatalf("expected %s %s, got %s", name, expected, field.String())
 	}
 }
