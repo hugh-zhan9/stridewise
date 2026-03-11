@@ -698,7 +698,8 @@ components:
     "baseline",
     "weather",
     "training_load_7d",
-    "constraints"
+    "constraints",
+    "recovery_status"
   ],
   "properties": {
     "request_id": { "type": "string" },
@@ -818,7 +819,8 @@ components:
         "max_training_minutes": { "type": "integer", "minimum": 0 }
       },
       "additionalProperties": false
-    }
+    },
+    "recovery_status": { "type": "string", "enum": ["green", "yellow", "red"] }
   },
   "additionalProperties": false
 }
