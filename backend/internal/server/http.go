@@ -528,7 +528,7 @@ func NewHTTPServer(
 				writeError(w, r, http.StatusInternalServerError, "", "create training log failed", "", 1.0)
 				return
 			}
-			jobID, err := enqueueBaselineRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, "training_create", log.LogID)
+			jobID, err := enqueueTrainingRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, log.LogID, "create")
 			if err != nil {
 				writeError(w, r, http.StatusServiceUnavailable, "", err.Error(), "", 1.0)
 				return
@@ -594,6 +594,19 @@ func NewHTTPServer(
 				writeError(w, r, http.StatusBadRequest, "", "bad request", "", 1.0)
 				return
 			}
+			existing, err := trainingStore.GetTrainingLog(r.Context(), logID)
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					writeError(w, r, http.StatusNotFound, "", "training log not found", "", 1.0)
+					return
+				}
+				writeError(w, r, http.StatusNotFound, "", "training log not found", "", 1.0)
+				return
+			}
+			if existing.Source != "manual" {
+				writeError(w, r, http.StatusBadRequest, "", "training log is not manual", "", 1.0)
+				return
+			}
 			log, start, end, err := buildTrainingLog(req)
 			if err != nil {
 				writeError(w, r, http.StatusBadRequest, "", err.Error(), "", 1.0)
@@ -618,7 +631,7 @@ func NewHTTPServer(
 				writeError(w, r, http.StatusInternalServerError, "", "update training log failed", "", 1.0)
 				return
 			}
-			jobID, err := enqueueBaselineRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, "training_update", log.LogID)
+			jobID, err := enqueueTrainingRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, log.LogID, "update")
 			if err != nil {
 				writeError(w, r, http.StatusServiceUnavailable, "", err.Error(), "", 1.0)
 				return
@@ -642,6 +655,10 @@ func NewHTTPServer(
 				writeError(w, r, http.StatusNotFound, "", "training log not found", "", 1.0)
 				return
 			}
+			if log.Source != "manual" {
+				writeError(w, r, http.StatusBadRequest, "", "training log is not manual", "", 1.0)
+				return
+			}
 			if err := trainingStore.SoftDeleteTrainingLog(r.Context(), logID); err != nil {
 				if errors.Is(err, pgx.ErrNoRows) {
 					writeError(w, r, http.StatusNotFound, "", "training log not found", "", 1.0)
@@ -650,7 +667,7 @@ func NewHTTPServer(
 				writeError(w, r, http.StatusInternalServerError, "", "delete training log failed", "", 1.0)
 				return
 			}
-			jobID, err := enqueueBaselineRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, "training_delete", logID)
+			jobID, err := enqueueTrainingRecalc(r.Context(), asyncJobStore, asynqClient, log.UserID, logID, "delete")
 			if err != nil {
 				writeError(w, r, http.StatusServiceUnavailable, "", err.Error(), "", 1.0)
 				return
