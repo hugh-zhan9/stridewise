@@ -40,6 +40,11 @@ tcx:
   data_file: "tcx.json"
 fit:
   data_file: "fit.json"
+weather:
+  qweather:
+    api_key: "key"
+    api_host: "host"
+    timeout_ms: 1500
 `
 	if _, err := tmp.WriteString(payload); err != nil {
 		t.Fatalf("write: %v", err)
@@ -75,5 +80,14 @@ fit:
 	}
 	if cfg.FIT.DataFile != "fit.json" {
 		t.Fatalf("expected fit data_file")
+	}
+	if cfg.Weather.QWeather.APIKey != "key" {
+		t.Fatalf("expected qweather api_key")
+	}
+	if cfg.Weather.QWeather.APIHost != "host" {
+		t.Fatalf("expected qweather api_host")
+	}
+	if cfg.Weather.QWeather.TimeoutMs != 1500 {
+		t.Fatalf("expected qweather timeout_ms")
 	}
 }

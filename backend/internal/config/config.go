@@ -47,6 +47,13 @@ type Config struct {
 	FIT struct {
 		DataFile string `yaml:"data_file"`
 	} `yaml:"fit"`
+	Weather struct {
+		QWeather struct {
+			APIKey    string `yaml:"api_key"`
+			APIHost   string `yaml:"api_host"`
+			TimeoutMs int    `yaml:"timeout_ms"`
+		} `yaml:"qweather"`
+	} `yaml:"weather"`
 	AI struct {
 		Provider string `yaml:"provider"`
 		OpenAI   struct {

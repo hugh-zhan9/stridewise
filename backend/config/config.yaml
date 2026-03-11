@@ -36,6 +36,12 @@ tcx:
 fit:
   data_file: "../running_page/src/static/activities.json"
 
+weather:
+  qweather:
+    api_key: "change-me"
+    api_host: "change-me"
+    timeout_ms: 3000
+
 ai:
   provider: "openai"
   openai:
