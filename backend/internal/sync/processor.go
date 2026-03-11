@@ -61,7 +61,7 @@ type BaselineRecalcEnqueuer interface {
 }
 
 type AbilityLevelEnqueuer interface {
-	EnqueueAbilityLevelCalc(ctx context.Context, userID, triggerType, triggerRef string) error
+	EnqueueAbilityLevelCalc(ctx context.Context, userID, triggerType, triggerRef string) (string, error)
 }
 
 type Processor struct {
@@ -147,7 +147,7 @@ func (p *Processor) ProcessSyncJob(ctx context.Context, jobID, userID, source st
 		}
 	}
 	if p.abilityEnqueuer != nil {
-		if err := p.abilityEnqueuer.EnqueueAbilityLevelCalc(ctx, userID, "sync", jobID); err != nil {
+		if _, err := p.abilityEnqueuer.EnqueueAbilityLevelCalc(ctx, userID, "sync", jobID); err != nil {
 			_ = p.store.AppendSyncError(ctx, jobID, source, "enqueue ability level failed: "+err.Error(), true)
 		}
 	}

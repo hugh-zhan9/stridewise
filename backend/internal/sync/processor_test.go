@@ -74,9 +74,9 @@ type fakeAbilityEnqueuer struct {
 	called bool
 }
 
-func (f *fakeAbilityEnqueuer) EnqueueAbilityLevelCalc(_ context.Context, _ string, _ string, _ string) error {
+func (f *fakeAbilityEnqueuer) EnqueueAbilityLevelCalc(_ context.Context, _ string, _ string, _ string) (string, error) {
 	f.called = true
-	return nil
+	return "job-ability-1", nil
 }
 
 func TestProcessor_ProcessSyncJob_KeepSource(t *testing.T) {

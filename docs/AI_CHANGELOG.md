@@ -363,3 +363,11 @@
 - `backend/internal/sync/processor_test.go`
 - `backend/cmd/worker/main.go`
 ----------------------------------------
+## [2026-03-11 15:36] [Bugfix]
+- **Change**: 修复同步处理器能力层级入队接口签名并更新测试桩
+- **Risk Analysis**: 风险较低，变更仅影响同步模块接口签名与测试桩，已在 backend 目录运行 go test ./... 验证。
+- **Risk Level**: S3（低级: 轻微行为偏差或日志/可观测性影响）
+- **Changed Files**:
+- `backend/internal/sync/processor.go`
+- `backend/internal/sync/processor_test.go`
+----------------------------------------
