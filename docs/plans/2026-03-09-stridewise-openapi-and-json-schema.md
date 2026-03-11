@@ -8,13 +8,15 @@
 - ~~当前版本：v1.3.0~~
 - ~~当前版本：v1.4.0~~
 - ~~当前版本：v1.5.0~~
-- 当前版本：v1.6.0
-- 发布日期：2026-03-10
+- ~~当前版本：v1.6.0~~
+- 当前版本：v1.7.0
+- 发布日期：2026-03-11
 - 文档状态：可评审
 
 ## 变更记录
 | 版本号 | 日期 | 变更说明 |
 | --- | --- | --- |
+| v1.7.0 | 2026-03-11 | 用户问卷字段落库，Profile schema 增加问卷字段。 |
 | v1.6.0 | 2026-03-10 | 训练总结/反馈支持 source_type/source_id，新增训练反馈内部接口说明。 |
 | v1.5.0 | 2026-03-10 | 新增内部建议生成/反馈接口与 Recommendation 扩展字段。 |
 | v1.4.0 | 2026-03-09 | 首发数据源调整为 Keep：provider 枚举新增 `keep` 并纳入统一来源范围。 |
@@ -477,7 +479,7 @@ components:
 
     ProfileInitRequest:
       type: object
-      required: [gender, age, height_cm, weight_kg, timezone, goal_type]
+      required: [gender, age, height_cm, weight_kg, timezone, goal_type, running_years, weekly_sessions, weekly_distance_km, longest_run_km, recent_discomfort]
       properties:
         gender: { type: string, enum: [male, female, other] }
         age: { type: integer, minimum: 10, maximum: 100 }
@@ -487,6 +489,11 @@ components:
         default_location: { type: string, example: Shanghai }
         goal_type: { type: string, enum: [fat_loss, health_maintain, improve_5k] }
         goal_target: { type: string }
+        running_years: { type: string, enum: ["0", "<1", "1-3", "3+"] }
+        weekly_sessions: { type: string, enum: ["0-1", "2-3", "4+"] }
+        weekly_distance_km: { type: string, enum: ["0-5", "5-15", "15-30", "30+"] }
+        longest_run_km: { type: string, enum: ["0", "3", "5", "10", "21"] }
+        recent_discomfort: { type: string, enum: [yes, no] }
 
     UpdateGoalRequest:
       type: object
@@ -503,6 +510,11 @@ components:
         goal_target: { type: string }
         ability_level: { type: string, enum: [beginner, intermediate, advanced] }
         timezone: { type: string }
+        running_years: { type: string, enum: ["0", "<1", "1-3", "3+"] }
+        weekly_sessions: { type: string, enum: ["0-1", "2-3", "4+"] }
+        weekly_distance_km: { type: string, enum: ["0-5", "5-15", "15-30", "30+"] }
+        longest_run_km: { type: string, enum: ["0", "3", "5", "10", "21"] }
+        recent_discomfort: { type: string, enum: [yes, no] }
 
     BaselineResponse:
       type: object
