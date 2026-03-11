@@ -19,12 +19,14 @@ import (
 	gpxconnector "stridewise/backend/internal/connector/gpx"
 	keepconnector "stridewise/backend/internal/connector/keep"
 	nikeconnector "stridewise/backend/internal/connector/nike"
+	"stridewise/backend/internal/recommendation"
 	stravaconnector "stridewise/backend/internal/connector/strava"
 	tcxconnector "stridewise/backend/internal/connector/tcx"
 	"stridewise/backend/internal/storage"
 	syncjob "stridewise/backend/internal/sync"
 	"stridewise/backend/internal/task"
 	"stridewise/backend/internal/training"
+	"stridewise/backend/internal/weather"
 	"stridewise/backend/internal/worker"
 )
 
@@ -59,7 +61,6 @@ func main() {
 	processor.SetBaselineEnqueuer(baselineEnqueuer)
 	processor.SetAbilityEnqueuer(asyncjob.NewAbilityLevelEnqueuer(store, asynqClient))
 	worker.SetSyncProcessor(processor)
-	worker.SetTrainingProcessor(training.NewProcessor(store))
 
 	var summarizer ai.Summarizer
 	if cfg.AI.Provider == "openai" {
@@ -75,6 +76,10 @@ func main() {
 	baselineProcessor := baseline.NewProcessor(store)
 	baselineProcessor.SetSummarizer(summarizer)
 	worker.SetBaselineProcessor(baselineProcessor)
+
+	weatherProvider := buildWeatherProvider(cfg)
+	recProcessor := buildRecommendationProcessor(store, weatherProvider, cfg)
+	worker.SetTrainingProcessor(buildTrainingProcessor(store, baselineProcessor, recProcessor))
 
 	var abilityLeveler ai.AbilityLeveler
 	if cfg.AI.Provider == "openai" {
@@ -106,4 +111,47 @@ func main() {
 	if err := server.Run(mux); err != nil {
 		log.Fatalf("worker run failed: %v", err)
 	}
+}
+
+func buildWeatherProvider(cfg *config.Config) weather.Provider {
+	mockProvider := weather.NewMockProvider(weather.SnapshotInput{
+		TemperatureC:      20,
+		FeelsLikeC:        20,
+		Humidity:          0.5,
+		WindSpeedMS:       2,
+		PrecipitationProb: 0.1,
+		AQI:               50,
+		UVIndex:           3,
+	})
+	if cfg == nil || cfg.Weather.QWeather.APIKey == "" || cfg.Weather.QWeather.APIHost == "" {
+		return mockProvider
+	}
+	return weather.NewQWeatherProvider(weather.QWeatherConfig{
+		APIKey:    cfg.Weather.QWeather.APIKey,
+		APIHost:   cfg.Weather.QWeather.APIHost,
+		TimeoutMs: cfg.Weather.QWeather.TimeoutMs,
+	})
+}
+
+func buildRecommendationProcessor(store *storage.PostgresStore, provider weather.Provider, cfg *config.Config) *recommendation.Processor {
+	var recommender ai.Recommender
+	if cfg != nil && cfg.AI.Provider == "openai" {
+		recommender = ai.NewOpenAIRecommender(ai.OpenAIConfig{
+			APIKey:      cfg.AI.OpenAI.APIKey,
+			BaseURL:     cfg.AI.OpenAI.BaseURL,
+			Model:       cfg.AI.OpenAI.Model,
+			TimeoutMs:   cfg.AI.OpenAI.TimeoutMs,
+			MaxTokens:   cfg.AI.OpenAI.MaxTokens,
+			Temperature: cfg.AI.OpenAI.Temperature,
+		})
+	}
+	processor := recommendation.NewProcessor(store, provider, recommender)
+	if cfg != nil {
+		processor.SetAIInfo(cfg.AI.Provider, cfg.AI.OpenAI.Model)
+	}
+	return processor
+}
+
+func buildTrainingProcessor(store training.AsyncJobStore, baseline training.BaselineRecalculator, rec training.RecommendationService) *training.Processor {
+	return training.NewProcessor(store, baseline, rec)
 }

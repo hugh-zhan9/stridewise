@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -97,5 +98,60 @@ func TestRunNightlyIfNeeded_SkipAlreadySuccess(t *testing.T) {
 	}
 	if len(store.upserts) != 0 {
 		t.Fatalf("expected no upserts when already success")
+	}
+}
+
+type trainingAsyncStoreStub struct {
+	lastStatus string
+	lastErr    string
+}
+
+func (s *trainingAsyncStoreStub) UpdateAsyncJobStatus(_ context.Context, _ string, status string, _ int, errMsg string) error {
+	s.lastStatus = status
+	s.lastErr = errMsg
+	return nil
+}
+
+type trainingBaselineStub struct {
+	called bool
+}
+
+func (t *trainingBaselineStub) RecalcForTrigger(_ context.Context, _ string, _ string, _ string) (error, error) {
+	t.called = true
+	return errors.New("summary failed"), nil
+}
+
+type trainingRecommenderStub struct {
+	called bool
+}
+
+func (t *trainingRecommenderStub) Generate(_ context.Context, _ string) (storage.Recommendation, error) {
+	t.called = true
+	return storage.Recommendation{}, nil
+}
+
+func TestWorkerWiring_TrainingProcessor(t *testing.T) {
+	store := &trainingAsyncStoreStub{}
+	baseline := &trainingBaselineStub{}
+	rec := &trainingRecommenderStub{}
+
+	processor := buildTrainingProcessor(store, baseline, rec)
+	if processor == nil {
+		t.Fatalf("expected training processor")
+	}
+	if err := processor.ProcessTrainingRecalc(context.Background(), "job-1", "u1", "log-1", "create", 0); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !baseline.called {
+		t.Fatalf("expected baseline recalc called")
+	}
+	if !rec.called {
+		t.Fatalf("expected recommender called")
+	}
+	if store.lastStatus != "success" {
+		t.Fatalf("expected success status, got %s", store.lastStatus)
+	}
+	if store.lastErr == "" {
+		t.Fatalf("expected summary error recorded")
 	}
 }
