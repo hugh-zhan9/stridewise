@@ -494,3 +494,17 @@
 - `backend/internal/storage/postgres.go`
 - `backend/migrations/011_recovery_scores.sql`
 ----------------------------------------
+## [2026-03-12 14:30] [Feature]
+- **Change**: P2第二步先支持单策略配置入口，新增ai.strategy并驱动决策引擎版本标识
+- **Risk Analysis**: 当前仅实现ai_primary策略，若配置为其他值会自动回退ai_primary；策略名写入engine_version用于追踪，后续扩展多策略需保持兼容
+- **Risk Level**: S3（低级: 轻微行为偏差或日志/可观测性影响）
+- **Changed Files**:
+- `backend/internal/recommendation/processor.go`
+- `backend/internal/recommendation/processor_test.go`
+- `backend/internal/config/config.go`
+- `backend/internal/config/config_test.go`
+- `backend/config/config.yaml`
+- `backend/cmd/api/main.go`
+- `backend/cmd/worker/main.go`
+- `docs/AI_CHANGELOG.md`
+----------------------------------------

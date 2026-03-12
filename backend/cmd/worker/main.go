@@ -151,6 +151,7 @@ func buildRecommendationProcessor(store *storage.PostgresStore, provider weather
 	processor := recommendation.NewProcessor(store, provider, recommender)
 	if cfg != nil {
 		processor.SetAIInfo(cfg.AI.Provider, cfg.AI.OpenAI.Model)
+		processor.SetDecisionStrategy(cfg.AI.Strategy)
 	}
 	return processor
 }

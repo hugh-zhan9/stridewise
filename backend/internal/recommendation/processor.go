@@ -39,6 +39,7 @@ type Processor struct {
 	provider    weather.Provider
 	recommender ai.Recommender
 	engine      DecisionEngine
+	strategy    string
 	now         func() time.Time
 	aiProvider  string
 	aiModel     string
@@ -53,6 +54,7 @@ func NewProcessor(store Store, provider weather.Provider, recommender ai.Recomme
 		provider:    provider,
 		recommender: recommender,
 		engine:      NewAIPrimaryEngine(recommender),
+		strategy:    "ai_primary",
 		now:         time.Now,
 	}
 }
@@ -60,6 +62,17 @@ func NewProcessor(store Store, provider weather.Provider, recommender ai.Recomme
 func (p *Processor) SetAIInfo(provider, model string) {
 	p.aiProvider = provider
 	p.aiModel = model
+}
+
+func (p *Processor) SetDecisionStrategy(strategy string) {
+	switch strategy {
+	case "", "ai_primary":
+		p.strategy = "ai_primary"
+		p.engine = NewAIPrimaryEngine(p.recommender)
+	default:
+		p.strategy = "ai_primary"
+		p.engine = NewAIPrimaryEngine(p.recommender)
+	}
 }
 
 func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recommendation, error) {
@@ -226,12 +239,19 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		AIProvider:         defaultAIProvider(p.aiProvider),
 		AIModel:            defaultAIModel(p.aiModel),
 		PromptVersion:      "v1",
-		EngineVersion:      "v2-modelized",
+		EngineVersion:      "v2-" + p.engineStrategy(),
 	}
 	if err := p.store.CreateRecommendation(ctx, rec); err != nil {
 		return storage.Recommendation{}, err
 	}
 	return rec, nil
+}
+
+func (p *Processor) engineStrategy() string {
+	if p.strategy == "" {
+		return "ai_primary"
+	}
+	return p.strategy
 }
 
 func (p *Processor) fetchPersonalization(ctx context.Context, userID string) *ai.RecommendationPersonalization {

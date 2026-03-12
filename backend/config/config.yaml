@@ -44,6 +44,7 @@ weather:
 
 ai:
   provider: "openai"
+  strategy: "ai_primary"
   openai:
     api_key: "change-me"
     base_url: "https://api.openai.com/v1"

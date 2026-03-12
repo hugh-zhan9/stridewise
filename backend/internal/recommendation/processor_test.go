@@ -397,6 +397,29 @@ func TestGenerateRecommendation_IncludesRecoveryScore(t *testing.T) {
 	}
 }
 
+func TestGenerateRecommendation_EngineVersionWithStrategy(t *testing.T) {
+	store := &fakeStore{
+		profile: storage.UserProfile{
+			UserID:       "u1",
+			LocationLat:  1,
+			LocationLng:  2,
+			Country:      "CN",
+			Province:     "SH",
+			City:         "SH",
+			AbilityLevel: "beginner",
+		},
+	}
+	p := NewProcessor(store, safeWeather{}, fakeAI{})
+	p.SetDecisionStrategy("ai_primary")
+	p.now = func() time.Time { return time.Date(2026, 3, 12, 9, 0, 0, 0, time.UTC) }
+	if _, err := p.Generate(context.Background(), "u1"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if store.lastRec.EngineVersion != "v2-ai_primary" {
+		t.Fatalf("expected engine_version v2-ai_primary, got %s", store.lastRec.EngineVersion)
+	}
+}
+
 func TestGenerateRecommendation_ConservativeTemplateDiscomfort(t *testing.T) {
 	store := &fakeStore{
 		profile: storage.UserProfile{

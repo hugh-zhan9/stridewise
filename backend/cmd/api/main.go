@@ -107,6 +107,7 @@ func main() {
 	}
 	recProcessor := recommendation.NewProcessor(store, provider, recommender)
 	recProcessor.SetAIInfo(cfg.AI.Provider, cfg.AI.OpenAI.Model)
+	recProcessor.SetDecisionStrategy(cfg.AI.Strategy)
 	trendProcessor := trend.NewProcessor(store)
 
 	httpSrv := server.NewHTTPServer(

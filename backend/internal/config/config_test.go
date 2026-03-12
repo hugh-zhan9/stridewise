@@ -45,6 +45,9 @@ weather:
     api_key: "key"
     api_host: "host"
     timeout_ms: 1500
+ai:
+  provider: "openai"
+  strategy: "ai_primary"
 `
 	if _, err := tmp.WriteString(payload); err != nil {
 		t.Fatalf("write: %v", err)
@@ -89,5 +92,8 @@ weather:
 	}
 	if cfg.Weather.QWeather.TimeoutMs != 1500 {
 		t.Fatalf("expected qweather timeout_ms")
+	}
+	if cfg.AI.Strategy != "ai_primary" {
+		t.Fatalf("expected ai strategy")
 	}
 }

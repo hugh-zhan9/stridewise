@@ -56,6 +56,7 @@ type Config struct {
 	} `yaml:"weather"`
 	AI struct {
 		Provider string `yaml:"provider"`
+		Strategy string `yaml:"strategy"`
 		OpenAI   struct {
 			APIKey      string  `yaml:"api_key"`
 			BaseURL     string  `yaml:"base_url"`
@@ -84,6 +85,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.AI.Provider == "" {
 		cfg.AI.Provider = "openai"
+	}
+	if cfg.AI.Strategy == "" {
+		cfg.AI.Strategy = "ai_primary"
 	}
 	return &cfg, nil
 }
