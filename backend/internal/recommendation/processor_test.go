@@ -420,6 +420,32 @@ func TestGenerateRecommendation_EngineVersionWithStrategy(t *testing.T) {
 	}
 }
 
+func TestGenerateRecommendation_RuleOnlyStrategy(t *testing.T) {
+	store := &fakeStore{
+		profile: storage.UserProfile{
+			UserID:       "u1",
+			LocationLat:  1,
+			LocationLng:  2,
+			Country:      "CN",
+			Province:     "SH",
+			City:         "SH",
+			AbilityLevel: "beginner",
+		},
+	}
+	p := NewProcessor(store, safeWeather{}, fakeAI{})
+	p.SetDecisionStrategy("rule_only")
+	p.now = func() time.Time { return time.Date(2026, 3, 12, 9, 0, 0, 0, time.UTC) }
+	if _, err := p.Generate(context.Background(), "u1"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if store.lastRec.EngineVersion != "v2-rule_only" {
+		t.Fatalf("expected engine_version v2-rule_only, got %s", store.lastRec.EngineVersion)
+	}
+	if !store.lastRec.IsFallback {
+		t.Fatalf("expected fallback=true for rule_only strategy")
+	}
+}
+
 func TestGenerateRecommendation_ConservativeTemplateDiscomfort(t *testing.T) {
 	store := &fakeStore{
 		profile: storage.UserProfile{

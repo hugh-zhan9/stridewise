@@ -69,6 +69,9 @@ func (p *Processor) SetDecisionStrategy(strategy string) {
 	case "", "ai_primary":
 		p.strategy = "ai_primary"
 		p.engine = NewAIPrimaryEngine(p.recommender)
+	case "rule_only":
+		p.strategy = "rule_only"
+		p.engine = NewRuleOnlyEngine()
 	default:
 		p.strategy = "ai_primary"
 		p.engine = NewAIPrimaryEngine(p.recommender)

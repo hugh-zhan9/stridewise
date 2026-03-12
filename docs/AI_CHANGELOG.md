@@ -508,3 +508,13 @@
 - `backend/cmd/worker/main.go`
 - `docs/AI_CHANGELOG.md`
 ----------------------------------------
+## [2026-03-12 14:32] [Feature]
+- **Change**: 新增rule_only策略并接入策略选择
+- **Risk Analysis**: rule_only策略为确定性保守输出，可能导致建议更保守；未知策略名仍回退ai_primary避免服务不可用
+- **Risk Level**: S3（低级: 轻微行为偏差或日志/可观测性影响）
+- **Changed Files**:
+- `backend/internal/recommendation/engine.go`
+- `backend/internal/recommendation/processor.go`
+- `backend/internal/recommendation/processor_test.go`
+- `docs/AI_CHANGELOG.md`
+----------------------------------------
