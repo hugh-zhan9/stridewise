@@ -480,3 +480,17 @@
 - `backend/internal/storage/postgres.go`
 - `backend/migrations/010_user_personalization_params.sql`
 ----------------------------------------
+## [2026-03-12 14:24] [Feature]
+- **Change**: 实现P2细粒度恢复评分与模型化决策引擎
+- **Risk Analysis**: 新增恢复评分计算与落库，以及AI优先决策引擎抽象；若新迁移未执行会导致recovery_scores写入失败被忽略，可能影响历史追踪但不阻断建议生成
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/ai/recommender.go`
+- `backend/internal/recommendation/processor.go`
+- `backend/internal/recommendation/processor_test.go`
+- `backend/internal/recommendation/engine.go`
+- `backend/internal/recommendation/recovery_score.go`
+- `backend/internal/recommendation/recovery_score_test.go`
+- `backend/internal/storage/postgres.go`
+- `backend/migrations/011_recovery_scores.sql`
+----------------------------------------

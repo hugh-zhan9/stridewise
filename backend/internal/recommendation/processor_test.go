@@ -15,6 +15,7 @@ import (
 type fakeStore struct {
 	created        bool
 	lastRec        storage.Recommendation
+	lastRecovery   storage.RecoveryScore
 	profile        storage.UserProfile
 	baseline       storage.BaselineCurrent
 	loadSummary    storage.TrainingLoadSummary
@@ -27,6 +28,11 @@ type fakeStore struct {
 func (f *fakeStore) CreateRecommendation(_ context.Context, rec storage.Recommendation) error {
 	f.created = true
 	f.lastRec = rec
+	return nil
+}
+
+func (f *fakeStore) CreateRecoveryScore(_ context.Context, score storage.RecoveryScore) error {
+	f.lastRecovery = score
 	return nil
 }
 
@@ -348,6 +354,46 @@ func TestGenerateRecommendation_IncludesPersonalizationParams(t *testing.T) {
 	}
 	if input.Personalization.VolumeMultiplier != 0.9 {
 		t.Fatalf("expected volume_multiplier 0.9")
+	}
+}
+
+func TestGenerateRecommendation_IncludesRecoveryScore(t *testing.T) {
+	store := &fakeStore{
+		profile: storage.UserProfile{
+			UserID:       "u1",
+			LocationLat:  1,
+			LocationLng:  2,
+			Country:      "CN",
+			Province:     "SH",
+			City:         "SH",
+			AbilityLevel: "beginner",
+		},
+		baseline: storage.BaselineCurrent{
+			UserID:       "u1",
+			ACWRSRPE:     1.55,
+			ACWRDistance: 1.45,
+			Monotony:     2.05,
+			Strain:       520,
+		},
+	}
+	p := NewProcessor(store, safeWeather{}, fakeAI{})
+	p.now = func() time.Time { return time.Date(2026, 3, 12, 9, 0, 0, 0, time.UTC) }
+	if _, err := p.Generate(context.Background(), "u1"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	var input ai.RecommendationInput
+	if err := json.Unmarshal(store.lastRec.InputJSON, &input); err != nil {
+		t.Fatalf("unmarshal input: %v", err)
+	}
+	if input.RecoveryScore == nil {
+		t.Fatalf("expected recovery_score")
+	}
+	if input.RecoveryScore.OverallScore <= 0 {
+		t.Fatalf("expected positive overall score")
+	}
+	if store.lastRecovery.UserID != "u1" {
+		t.Fatalf("expected recovery score persisted")
 	}
 }
 

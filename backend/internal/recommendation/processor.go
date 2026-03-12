@@ -19,6 +19,7 @@ import (
 
 type Store interface {
 	CreateRecommendation(ctx context.Context, rec storage.Recommendation) error
+	CreateRecoveryScore(ctx context.Context, score storage.RecoveryScore) error
 	GetLatestRecommendation(ctx context.Context, userID string) (storage.Recommendation, error)
 	CreateRecommendationFeedback(ctx context.Context, feedback storage.RecommendationFeedback) error
 	GetUserProfile(ctx context.Context, userID string) (storage.UserProfile, error)
@@ -37,6 +38,7 @@ type Processor struct {
 	store       Store
 	provider    weather.Provider
 	recommender ai.Recommender
+	engine      DecisionEngine
 	now         func() time.Time
 	aiProvider  string
 	aiModel     string
@@ -46,7 +48,13 @@ var ErrFeedbackExists = errors.New("recommendation feedback exists")
 var ErrAbilityLevelNotReady = errors.New("ability level not ready")
 
 func NewProcessor(store Store, provider weather.Provider, recommender ai.Recommender) *Processor {
-	return &Processor{store: store, provider: provider, recommender: recommender, now: time.Now}
+	return &Processor{
+		store:       store,
+		provider:    provider,
+		recommender: recommender,
+		engine:      NewAIPrimaryEngine(recommender),
+		now:         time.Now,
+	}
 }
 
 func (p *Processor) SetAIInfo(provider, model string) {
@@ -95,7 +103,22 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 	latestFeedback := p.fetchLatestTrainingFeedback(ctx, userID)
 	personalization := p.fetchPersonalization(ctx, userID)
 
-	recoveryStatus := CalcRecoveryStatus(maxFloat(baseline.ACWRSRPE, baseline.ACWRDistance), baseline.Monotony)
+	recoveryScore := BuildRecoveryScore(maxFloat(baseline.ACWRSRPE, baseline.ACWRDistance), baseline.Monotony, baseline.Strain, hasDiscomfort, profile.RestingHR)
+	recoveryStatus := recoveryScore.RecoveryStatus
+	_ = p.store.CreateRecoveryScore(ctx, storage.RecoveryScore{
+		ScoreID:           uuid.NewString(),
+		UserID:            userID,
+		ComputedAt:        now.UTC(),
+		OverallScore:      recoveryScore.OverallScore,
+		FatigueScore:      recoveryScore.FatigueScore,
+		RecoveryScore:     recoveryScore.RecoveryScore,
+		ACWRComponent:     recoveryScore.ACWRComponent,
+		MonotonyComponent: recoveryScore.MonotonyComponent,
+		StrainComponent:   recoveryScore.StrainComponent,
+		DiscomfortPenalty: recoveryScore.DiscomfortPenalty,
+		RestingHRPenalty:  recoveryScore.RestingHRPenalty,
+		RecoveryStatus:    recoveryScore.RecoveryStatus,
+	})
 	constraints := ai.RecommendationConstraints{
 		WeatherRisk:   string(weatherRisk),
 		HasDiscomfort: hasDiscomfort,
@@ -147,11 +170,29 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		Constraints:            constraints,
 		CurrentTime:            now,
 		RecoveryStatus:         recoveryStatus,
+		RecoveryScore: &ai.RecommendationRecoveryScore{
+			OverallScore:      recoveryScore.OverallScore,
+			FatigueScore:      recoveryScore.FatigueScore,
+			RecoveryScore:     recoveryScore.RecoveryScore,
+			ACWRComponent:     recoveryScore.ACWRComponent,
+			MonotonyComponent: recoveryScore.MonotonyComponent,
+			StrainComponent:   recoveryScore.StrainComponent,
+			DiscomfortPenalty: recoveryScore.DiscomfortPenalty,
+			RestingHRPenalty:  recoveryScore.RestingHRPenalty,
+			RecoveryStatus:    recoveryScore.RecoveryStatus,
+		},
 		LatestTrainingFeedback: latestFeedback,
 		Personalization:        personalization,
 	}
 
-	output, isFallback := p.callAI(ctx, input, weatherErr)
+	engine := p.engine
+	if engine == nil {
+		engine = NewAIPrimaryEngine(p.recommender)
+	}
+	output, isFallback := engine.Decide(ctx, DecisionContext{
+		Input:      input,
+		WeatherErr: weatherErr,
+	})
 	if baseline.Status == "insufficient_data" || baseline.DataSessions7d < 3 {
 		output = conservativeOutput(profile)
 		isFallback = true
@@ -185,7 +226,7 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		AIProvider:         defaultAIProvider(p.aiProvider),
 		AIModel:            defaultAIModel(p.aiModel),
 		PromptVersion:      "v1",
-		EngineVersion:      "v1",
+		EngineVersion:      "v2-modelized",
 	}
 	if err := p.store.CreateRecommendation(ctx, rec); err != nil {
 		return storage.Recommendation{}, err
@@ -366,20 +407,6 @@ func (p *Processor) Feedback(ctx context.Context, recID string, userID string, u
 		return err
 	}
 	return nil
-}
-
-func (p *Processor) callAI(ctx context.Context, input ai.RecommendationInput, weatherErr error) (RecommendationOutput, bool) {
-	if weatherErr != nil {
-		return fallbackOutput(), true
-	}
-	if p.recommender == nil {
-		return fallbackOutput(), true
-	}
-	out, err := p.recommender.Recommend(ctx, input)
-	if err != nil {
-		return fallbackOutput(), true
-	}
-	return convertOutput(out), false
 }
 
 func (p *Processor) fetchWeather(ctx context.Context, userID string, location weather.Location) (weather.SnapshotInput, weather.RiskLevel, error) {

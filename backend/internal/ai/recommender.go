@@ -18,6 +18,7 @@ type RecommendationInput struct {
 	Constraints            RecommendationConstraints       `json:"constraints"`
 	CurrentTime            time.Time                       `json:"current_time"`
 	RecoveryStatus         string                          `json:"recovery_status"`
+	RecoveryScore          *RecommendationRecoveryScore    `json:"recovery_score,omitempty"`
 	LatestTrainingFeedback *RecommendationTrainingFeedback `json:"latest_training_feedback,omitempty"`
 	Personalization        *RecommendationPersonalization  `json:"personalization,omitempty"`
 }
@@ -125,6 +126,18 @@ type RecommendationPersonalization struct {
 	IntensityBias    float64            `json:"intensity_bias"`
 	VolumeMultiplier float64            `json:"volume_multiplier"`
 	TypePreference   map[string]float64 `json:"type_preference"`
+}
+
+type RecommendationRecoveryScore struct {
+	OverallScore        float64 `json:"overall_score"`
+	FatigueScore        float64 `json:"fatigue_score"`
+	RecoveryScore       float64 `json:"recovery_score"`
+	ACWRComponent       float64 `json:"acwr_component"`
+	MonotonyComponent   float64 `json:"monotony_component"`
+	StrainComponent     float64 `json:"strain_component"`
+	DiscomfortPenalty   float64 `json:"discomfort_penalty"`
+	RestingHRPenalty    float64 `json:"resting_hr_penalty"`
+	RecoveryStatus      string  `json:"recovery_status"`
 }
 
 type RecommendationOutput struct {

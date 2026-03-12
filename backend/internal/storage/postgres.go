@@ -165,6 +165,21 @@ type UserPersonalizationParams struct {
 	UpdatedAt        time.Time
 }
 
+type RecoveryScore struct {
+	ScoreID            string
+	UserID             string
+	ComputedAt         time.Time
+	OverallScore       float64
+	FatigueScore       float64
+	RecoveryScore      float64
+	ACWRComponent      float64
+	MonotonyComponent  float64
+	StrainComponent    float64
+	DiscomfortPenalty  float64
+	RestingHRPenalty   float64
+	RecoveryStatus     string
+}
+
 type TrainingLoadSummary struct {
 	Sessions int
 	Distance float64
@@ -816,6 +831,37 @@ func (s *PostgresStore) CreateRecommendationFeedback(ctx context.Context, feedba
 		VALUES ($1,$2,$3,$4,$5,NOW())
 	`, feedback.FeedbackID, feedback.RecID, feedback.UserID, feedback.Useful, feedback.Reason)
 	return err
+}
+
+func (s *PostgresStore) CreateRecoveryScore(ctx context.Context, score RecoveryScore) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO recovery_scores (
+			score_id, user_id, computed_at, overall_score, fatigue_score, recovery_score,
+			acwr_component, monotony_component, strain_component, discomfort_penalty, resting_hr_penalty, recovery_status
+		)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+	`, score.ScoreID, score.UserID, score.ComputedAt, score.OverallScore, score.FatigueScore, score.RecoveryScore,
+		score.ACWRComponent, score.MonotonyComponent, score.StrainComponent, score.DiscomfortPenalty, score.RestingHRPenalty, score.RecoveryStatus)
+	return err
+}
+
+func (s *PostgresStore) GetLatestRecoveryScore(ctx context.Context, userID string) (RecoveryScore, error) {
+	var out RecoveryScore
+	err := s.pool.QueryRow(ctx, `
+		SELECT score_id, user_id, computed_at, overall_score, fatigue_score, recovery_score,
+		       acwr_component, monotony_component, strain_component, discomfort_penalty, resting_hr_penalty, recovery_status
+		FROM recovery_scores
+		WHERE user_id=$1
+		ORDER BY computed_at DESC
+		LIMIT 1
+	`, userID).Scan(
+		&out.ScoreID, &out.UserID, &out.ComputedAt, &out.OverallScore, &out.FatigueScore, &out.RecoveryScore,
+		&out.ACWRComponent, &out.MonotonyComponent, &out.StrainComponent, &out.DiscomfortPenalty, &out.RestingHRPenalty, &out.RecoveryStatus,
+	)
+	if err != nil {
+		return RecoveryScore{}, err
+	}
+	return out, nil
 }
 
 func (s *PostgresStore) ListRecentRecommendationFeedbackSignals(ctx context.Context, userID string, from time.Time, to time.Time) ([]RecommendationFeedbackSignal, error) {
