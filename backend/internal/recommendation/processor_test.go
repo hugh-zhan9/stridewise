@@ -21,6 +21,7 @@ type fakeStore struct {
 	hasDiscomfort  bool
 	latestFeedback storage.TrainingFeedback
 	latestSummary  storage.TrainingSummary
+	personalParams storage.UserPersonalizationParams
 }
 
 func (f *fakeStore) CreateRecommendation(_ context.Context, rec storage.Recommendation) error {
@@ -84,6 +85,10 @@ func (f *fakeStore) GetLatestTrainingFeedback(_ context.Context, _ string) (stor
 
 func (f *fakeStore) GetTrainingSummaryBySource(_ context.Context, _ string, _ string) (storage.TrainingSummary, error) {
 	return f.latestSummary, nil
+}
+
+func (f *fakeStore) GetUserPersonalizationParams(_ context.Context, _ string) (storage.UserPersonalizationParams, error) {
+	return f.personalParams, nil
 }
 
 type fakeAI struct{}
@@ -302,6 +307,47 @@ func TestGenerateRecommendation_ConservativeTemplate(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected explanation contains 保守模板")
+	}
+}
+
+func TestGenerateRecommendation_IncludesPersonalizationParams(t *testing.T) {
+	store := &fakeStore{
+		profile: storage.UserProfile{
+			UserID:       "u1",
+			LocationLat:  1,
+			LocationLng:  2,
+			Country:      "CN",
+			Province:     "SH",
+			City:         "SH",
+			AbilityLevel: "beginner",
+		},
+		personalParams: storage.UserPersonalizationParams{
+			UserID:           "u1",
+			IntensityBias:    -0.1,
+			VolumeMultiplier: 0.9,
+			TypePreference: map[string]float64{
+				"轻松跑": 1.2,
+				"有氧跑": 1.0,
+				"间歇跑": 0.8,
+				"长距离": 0.9,
+			},
+		},
+	}
+	p := NewProcessor(store, safeWeather{}, fakeAI{})
+	p.now = func() time.Time { return time.Date(2026, 3, 10, 9, 0, 0, 0, time.UTC) }
+	if _, err := p.Generate(context.Background(), "u1"); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	var input ai.RecommendationInput
+	if err := json.Unmarshal(store.lastRec.InputJSON, &input); err != nil {
+		t.Fatalf("unmarshal input: %v", err)
+	}
+	if input.Personalization == nil {
+		t.Fatalf("expected personalization in input")
+	}
+	if input.Personalization.VolumeMultiplier != 0.9 {
+		t.Fatalf("expected volume_multiplier 0.9")
 	}
 }
 

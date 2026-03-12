@@ -56,3 +56,20 @@ func TestAbilityLevelPayload_RequiresJobID(t *testing.T) {
 		t.Fatal("expected error for missing job_id")
 	}
 }
+
+func TestPersonalizationRecalcPayload_RoundTrip(t *testing.T) {
+	p := PersonalizationRecalcPayload{JobID: "job-1", UserID: "u1", TriggerType: "feedback", TriggerRef: "f1"}
+	b, err := EncodePersonalizationRecalcPayload(p)
+	if err != nil {
+		t.Fatalf("encode failed: %v", err)
+	}
+
+	got, err := DecodePersonalizationRecalcPayload(b)
+	if err != nil {
+		t.Fatalf("decode failed: %v", err)
+	}
+
+	if got.JobID != p.JobID || got.UserID != p.UserID || got.TriggerType != p.TriggerType || got.TriggerRef != p.TriggerRef {
+		t.Fatalf("unexpected payload: %+v", got)
+	}
+}

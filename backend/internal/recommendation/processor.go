@@ -30,6 +30,7 @@ type Store interface {
 	GetLatestTrainingDiscomfort(ctx context.Context, userID string) (bool, error)
 	GetLatestTrainingFeedback(ctx context.Context, userID string) (storage.TrainingFeedback, error)
 	GetTrainingSummaryBySource(ctx context.Context, sourceType, sourceID string) (storage.TrainingSummary, error)
+	GetUserPersonalizationParams(ctx context.Context, userID string) (storage.UserPersonalizationParams, error)
 }
 
 type Processor struct {
@@ -92,6 +93,7 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 	loadSummary, _ := p.store.GetRecentTrainingSummary(ctx, userID, now.Add(-7*24*time.Hour), now)
 	hasDiscomfort, _ := p.store.GetLatestTrainingDiscomfort(ctx, userID)
 	latestFeedback := p.fetchLatestTrainingFeedback(ctx, userID)
+	personalization := p.fetchPersonalization(ctx, userID)
 
 	recoveryStatus := CalcRecoveryStatus(maxFloat(baseline.ACWRSRPE, baseline.ACWRDistance), baseline.Monotony)
 	constraints := ai.RecommendationConstraints{
@@ -146,6 +148,7 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		CurrentTime:            now,
 		RecoveryStatus:         recoveryStatus,
 		LatestTrainingFeedback: latestFeedback,
+		Personalization:        personalization,
 	}
 
 	output, isFallback := p.callAI(ctx, input, weatherErr)
@@ -188,6 +191,18 @@ func (p *Processor) Generate(ctx context.Context, userID string) (storage.Recomm
 		return storage.Recommendation{}, err
 	}
 	return rec, nil
+}
+
+func (p *Processor) fetchPersonalization(ctx context.Context, userID string) *ai.RecommendationPersonalization {
+	params, err := p.store.GetUserPersonalizationParams(ctx, userID)
+	if err != nil {
+		return nil
+	}
+	return &ai.RecommendationPersonalization{
+		IntensityBias:    params.IntensityBias,
+		VolumeMultiplier: params.VolumeMultiplier,
+		TypePreference:   params.TypePreference,
+	}
 }
 
 func maxFloat(a float64, b float64) float64 {

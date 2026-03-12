@@ -3,7 +3,9 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -146,6 +148,21 @@ type RecommendationFeedback struct {
 	Useful     string
 	Reason     string
 	CreatedAt  time.Time
+}
+
+type RecommendationFeedbackSignal struct {
+	Useful      string
+	WorkoutType string
+}
+
+type UserPersonalizationParams struct {
+	UserID           string
+	IntensityBias    float64
+	VolumeMultiplier float64
+	TypePreference   map[string]float64
+	ReasonJSON       []byte
+	Version          int
+	UpdatedAt        time.Time
 }
 
 type TrainingLoadSummary struct {
@@ -799,6 +816,130 @@ func (s *PostgresStore) CreateRecommendationFeedback(ctx context.Context, feedba
 		VALUES ($1,$2,$3,$4,$5,NOW())
 	`, feedback.FeedbackID, feedback.RecID, feedback.UserID, feedback.Useful, feedback.Reason)
 	return err
+}
+
+func (s *PostgresStore) ListRecentRecommendationFeedbackSignals(ctx context.Context, userID string, from time.Time, to time.Time) ([]RecommendationFeedbackSignal, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT rf.useful, r.output_json
+		FROM recommendation_feedbacks rf
+		JOIN recommendations r ON r.rec_id = rf.rec_id
+		WHERE rf.user_id=$1 AND rf.created_at >= $2 AND rf.created_at <= $3
+		ORDER BY rf.created_at DESC
+		LIMIT 100
+	`, userID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]RecommendationFeedbackSignal, 0)
+	for rows.Next() {
+		var useful string
+		var outputJSON []byte
+		if err := rows.Scan(&useful, &outputJSON); err != nil {
+			return nil, err
+		}
+		workoutType := ""
+		if len(outputJSON) > 0 {
+			var payload map[string]any
+			if err := json.Unmarshal(outputJSON, &payload); err == nil {
+				if v, ok := payload["workout_type"].(string); ok {
+					workoutType = normalizeWorkoutType(v)
+				}
+			}
+		}
+		out = append(out, RecommendationFeedbackSignal{
+			Useful:      useful,
+			WorkoutType: workoutType,
+		})
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+	return out, nil
+}
+
+func (s *PostgresStore) UpsertUserPersonalizationParams(ctx context.Context, params UserPersonalizationParams) error {
+	typePreference := params.TypePreference
+	if typePreference == nil {
+		typePreference = map[string]float64{}
+	}
+	typePreferenceJSON, err := json.Marshal(typePreference)
+	if err != nil {
+		return err
+	}
+	reasonJSON := params.ReasonJSON
+	if len(reasonJSON) == 0 {
+		reasonJSON = []byte(`{}`)
+	}
+	version := params.Version
+	if version <= 0 {
+		version = 1
+	}
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO user_personalization_params (
+			user_id, intensity_bias, volume_multiplier, type_preference_json, reason_json, version, updated_at, created_at
+		)
+		VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,$6,NOW(),NOW())
+		ON CONFLICT (user_id)
+		DO UPDATE SET
+			intensity_bias=EXCLUDED.intensity_bias,
+			volume_multiplier=EXCLUDED.volume_multiplier,
+			type_preference_json=EXCLUDED.type_preference_json,
+			reason_json=EXCLUDED.reason_json,
+			version=user_personalization_params.version + 1,
+			updated_at=NOW()
+	`, params.UserID, params.IntensityBias, params.VolumeMultiplier, string(typePreferenceJSON), string(reasonJSON), version)
+	return err
+}
+
+func (s *PostgresStore) GetUserPersonalizationParams(ctx context.Context, userID string) (UserPersonalizationParams, error) {
+	var out UserPersonalizationParams
+	var typePreferenceJSON []byte
+	err := s.pool.QueryRow(ctx, `
+		SELECT user_id, intensity_bias, volume_multiplier, type_preference_json, reason_json, version, updated_at
+		FROM user_personalization_params
+		WHERE user_id=$1
+	`, userID).Scan(
+		&out.UserID, &out.IntensityBias, &out.VolumeMultiplier, &typePreferenceJSON, &out.ReasonJSON, &out.Version, &out.UpdatedAt,
+	)
+	if err != nil {
+		return UserPersonalizationParams{}, err
+	}
+	if len(typePreferenceJSON) > 0 {
+		if err := json.Unmarshal(typePreferenceJSON, &out.TypePreference); err != nil {
+			return UserPersonalizationParams{}, err
+		}
+	}
+	if out.TypePreference == nil {
+		out.TypePreference = defaultTypePreference()
+	}
+	return out, nil
+}
+
+func defaultTypePreference() map[string]float64 {
+	return map[string]float64{
+		"轻松跑": 1.0,
+		"有氧跑": 1.0,
+		"间歇跑": 1.0,
+		"长距离": 1.0,
+	}
+}
+
+func normalizeWorkoutType(raw string) string {
+	x := strings.ToLower(strings.TrimSpace(raw))
+	switch {
+	case strings.Contains(x, "轻松"), strings.Contains(x, "easy"):
+		return "轻松跑"
+	case strings.Contains(x, "有氧"), strings.Contains(x, "aerobic"):
+		return "有氧跑"
+	case strings.Contains(x, "间歇"), strings.Contains(x, "interval"):
+		return "间歇跑"
+	case strings.Contains(x, "长距离"), strings.Contains(x, "long"):
+		return "长距离"
+	default:
+		return ""
+	}
 }
 
 func (s *PostgresStore) HasTrainingConflict(ctx context.Context, userID string, start time.Time, end time.Time, excludeLogID string) (bool, error) {

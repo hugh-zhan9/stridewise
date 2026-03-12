@@ -8,6 +8,7 @@ import (
 
 	"stridewise/backend/internal/baseline"
 	"stridewise/backend/internal/ability"
+	"stridewise/backend/internal/personalization"
 	"stridewise/backend/internal/sync"
 	"stridewise/backend/internal/task"
 	"stridewise/backend/internal/training"
@@ -17,6 +18,7 @@ var syncProcessor *sync.Processor
 var trainingProcessor *training.Processor
 var baselineProcessor *baseline.Processor
 var abilityProcessor *ability.Processor
+var personalizationProcessor *personalization.Processor
 
 func SetSyncProcessor(p *sync.Processor) {
 	syncProcessor = p
@@ -32,6 +34,10 @@ func SetBaselineProcessor(p *baseline.Processor) {
 
 func SetAbilityProcessor(p *ability.Processor) {
 	abilityProcessor = p
+}
+
+func SetPersonalizationProcessor(p *personalization.Processor) {
+	personalizationProcessor = p
 }
 
 func HandleSyncJob(ctx context.Context, t *asynq.Task) error {
@@ -81,4 +87,16 @@ func HandleAbilityLevelCalc(ctx context.Context, t *asynq.Task) error {
 	}
 	retryCount, _ := asynq.GetRetryCount(ctx)
 	return abilityProcessor.ProcessAbilityLevel(ctx, p.JobID, p.UserID, p.TriggerType, p.TriggerRef, retryCount)
+}
+
+func HandlePersonalizationRecalc(ctx context.Context, t *asynq.Task) error {
+	if personalizationProcessor == nil {
+		return errors.New("personalization processor is not configured")
+	}
+	p, err := task.DecodePersonalizationRecalcPayload(t.Payload())
+	if err != nil {
+		return err
+	}
+	retryCount, _ := asynq.GetRetryCount(ctx)
+	return personalizationProcessor.ProcessPersonalizationRecalc(ctx, p.JobID, p.UserID, p.TriggerType, p.TriggerRef, retryCount)
 }

@@ -19,6 +19,7 @@ type RecommendationInput struct {
 	CurrentTime            time.Time                       `json:"current_time"`
 	RecoveryStatus         string                          `json:"recovery_status"`
 	LatestTrainingFeedback *RecommendationTrainingFeedback `json:"latest_training_feedback,omitempty"`
+	Personalization        *RecommendationPersonalization  `json:"personalization,omitempty"`
 }
 
 type RecommendationUserProfile struct {
@@ -118,6 +119,12 @@ type RecommendationTrainingSummary struct {
 	AnomalyNotes     string `json:"anomaly_notes"`
 	PerformanceNotes string `json:"performance_notes"`
 	NextSuggestion   string `json:"next_suggestion"`
+}
+
+type RecommendationPersonalization struct {
+	IntensityBias    float64            `json:"intensity_bias"`
+	VolumeMultiplier float64            `json:"volume_multiplier"`
+	TypePreference   map[string]float64 `json:"type_preference"`
 }
 
 type RecommendationOutput struct {

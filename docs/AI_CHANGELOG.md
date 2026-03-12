@@ -460,3 +460,23 @@
 - `backend/internal/trend/processor_test.go`
 - `backend/cmd/api/main.go`
 ----------------------------------------
+## [2026-03-12 14:15] [Feature]
+- **Change**: 实现P1-2个性化参数自动学习闭环，新增参数存储、重算任务与推荐输入接入
+- **Risk Analysis**: 新增异步任务和推荐输入字段，若迁移未执行会导致参数查询失败回退为无个性化；训练反馈触发入队依赖Redis与asynq可用，否则会返回服务不可用
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `backend/internal/personalization/processor.go`
+- `backend/internal/personalization/processor_test.go`
+- `backend/internal/task/task.go`
+- `backend/internal/task/task_test.go`
+- `backend/internal/ai/recommender.go`
+- `backend/internal/recommendation/processor.go`
+- `backend/internal/recommendation/processor_test.go`
+- `backend/internal/worker/handler.go`
+- `backend/internal/worker/handler_personalization_test.go`
+- `backend/internal/worker/handler_training_test.go`
+- `backend/cmd/worker/main.go`
+- `backend/internal/server/http.go`
+- `backend/internal/storage/postgres.go`
+- `backend/migrations/010_user_personalization_params.sql`
+----------------------------------------

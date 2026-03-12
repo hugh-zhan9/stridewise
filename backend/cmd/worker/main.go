@@ -20,6 +20,7 @@ import (
 	keepconnector "stridewise/backend/internal/connector/keep"
 	nikeconnector "stridewise/backend/internal/connector/nike"
 	"stridewise/backend/internal/recommendation"
+	"stridewise/backend/internal/personalization"
 	stravaconnector "stridewise/backend/internal/connector/strava"
 	tcxconnector "stridewise/backend/internal/connector/tcx"
 	"stridewise/backend/internal/storage"
@@ -94,6 +95,7 @@ func main() {
 	}
 	abilityProcessor := ability.NewProcessor(store, abilityLeveler)
 	worker.SetAbilityProcessor(abilityProcessor)
+	worker.SetPersonalizationProcessor(personalization.NewProcessor(store))
 
 	go runNightlyScheduler(context.Background(), store, baselineEnqueuer, time.Now)
 
@@ -107,6 +109,7 @@ func main() {
 	mux.HandleFunc(task.TypeTrainingRecalc, worker.HandleTrainingRecalc)
 	mux.HandleFunc(task.TypeBaselineRecalc, worker.HandleBaselineRecalc)
 	mux.HandleFunc(task.TypeAbilityLevelCalc, worker.HandleAbilityLevelCalc)
+	mux.HandleFunc(task.TypePersonalizationRecalc, worker.HandlePersonalizationRecalc)
 
 	if err := server.Run(mux); err != nil {
 		log.Fatalf("worker run failed: %v", err)

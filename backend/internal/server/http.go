@@ -806,7 +806,16 @@ func NewHTTPServer(
 			writeError(w, r, http.StatusInternalServerError, "", "submit feedback failed", "", 1.0)
 			return
 		}
-		writeJSON(w, r, http.StatusOK, map[string]any{"rec_id": recID})
+		resp := map[string]any{"rec_id": recID}
+		if asyncJobStore != nil && asynqClient != nil {
+			jobID, err := enqueuePersonalizationRecalc(r.Context(), asyncJobStore, asynqClient, req.UserID, "recommendation_feedback", recID)
+			if err != nil {
+				writeError(w, r, http.StatusServiceUnavailable, "", "enqueue personalization recalc failed", "", 1.0)
+				return
+			}
+			resp["job_id"] = jobID
+		}
+		writeJSON(w, r, http.StatusOK, resp)
 	}))
 
 	srv.Handle("/internal/v1/baseline/current", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -988,7 +997,16 @@ func NewHTTPServer(
 			writeError(w, r, http.StatusInternalServerError, "", "create training feedback failed", "", 1.0)
 			return
 		}
-		writeJSON(w, r, http.StatusOK, map[string]any{"feedback_id": feedback.FeedbackID})
+		resp := map[string]any{"feedback_id": feedback.FeedbackID}
+		if asyncJobStore != nil && asynqClient != nil {
+			jobID, err := enqueuePersonalizationRecalc(r.Context(), asyncJobStore, asynqClient, req.UserID, "training_feedback", feedback.FeedbackID)
+			if err != nil {
+				writeError(w, r, http.StatusServiceUnavailable, "", "enqueue personalization recalc failed", "", 1.0)
+				return
+			}
+			resp["job_id"] = jobID
+		}
+		writeJSON(w, r, http.StatusOK, resp)
 	}))
 
 	return srv
@@ -1299,6 +1317,44 @@ func enqueueTrainingRecalc(ctx context.Context, asyncJobStore AsyncJobStore, asy
 		return "", errBadRequest("enqueue client unavailable")
 	}
 	if _, err := asynqClient.Enqueue(asynq.NewTask(task.TypeTrainingRecalc, b), asynq.Queue("default")); err != nil {
+		_ = asyncJobStore.UpdateAsyncJobStatus(ctx, jobID, "failed", 0, err.Error())
+		return "", errBadRequest("enqueue failed")
+	}
+	return jobID, nil
+}
+
+func enqueuePersonalizationRecalc(ctx context.Context, asyncJobStore AsyncJobStore, asynqClient *asynq.Client, userID string, triggerType string, triggerRef string) (string, error) {
+	if asyncJobStore == nil {
+		return "", errBadRequest("async subsystem unavailable")
+	}
+	jobID := uuid.NewString()
+	payload := task.PersonalizationRecalcPayload{
+		JobID:       jobID,
+		UserID:      userID,
+		TriggerType: triggerType,
+		TriggerRef:  triggerRef,
+	}
+	b, err := task.EncodePersonalizationRecalcPayload(payload)
+	if err != nil {
+		return "", errBadRequest("payload invalid")
+	}
+	job := storage.AsyncJob{
+		JobID:        jobID,
+		JobType:      task.TypePersonalizationRecalc,
+		UserID:       userID,
+		PayloadJSON:  b,
+		Status:       "queued",
+		RetryCount:   0,
+		ErrorMessage: "",
+	}
+	if err := asyncJobStore.CreateAsyncJob(ctx, job); err != nil {
+		return "", errBadRequest("create async job failed")
+	}
+	if asynqClient == nil {
+		_ = asyncJobStore.UpdateAsyncJobStatus(ctx, jobID, "failed", 0, "enqueue client unavailable")
+		return "", errBadRequest("enqueue client unavailable")
+	}
+	if _, err := asynqClient.Enqueue(asynq.NewTask(task.TypePersonalizationRecalc, b), asynq.Queue("default")); err != nil {
 		_ = asyncJobStore.UpdateAsyncJobStatus(ctx, jobID, "failed", 0, err.Error())
 		return "", errBadRequest("enqueue failed")
 	}

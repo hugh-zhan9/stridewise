@@ -9,6 +9,7 @@ const TypeSyncJob = "sync:job"
 const TypeTrainingRecalc = "training:recalc"
 const TypeBaselineRecalc = "baseline:recalc"
 const TypeAbilityLevelCalc = "ability_level:calc"
+const TypePersonalizationRecalc = "personalization:recalc"
 
 var allowedSources = map[string]struct{}{
 	"keep":   {},
@@ -42,6 +43,13 @@ type BaselineRecalcPayload struct {
 }
 
 type AbilityLevelPayload struct {
+	JobID       string `json:"job_id"`
+	UserID      string `json:"user_id"`
+	TriggerType string `json:"trigger_type"`
+	TriggerRef  string `json:"trigger_ref"`
+}
+
+type PersonalizationRecalcPayload struct {
 	JobID       string `json:"job_id"`
 	UserID      string `json:"user_id"`
 	TriggerType string `json:"trigger_type"`
@@ -185,6 +193,42 @@ func DecodeAbilityLevelPayload(b []byte) (AbilityLevelPayload, error) {
 	}
 	if p.TriggerRef == "" {
 		return AbilityLevelPayload{}, errors.New("trigger_ref is required")
+	}
+	return p, nil
+}
+
+func EncodePersonalizationRecalcPayload(p PersonalizationRecalcPayload) ([]byte, error) {
+	if p.JobID == "" {
+		return nil, errors.New("job_id is required")
+	}
+	if p.UserID == "" {
+		return nil, errors.New("user_id is required")
+	}
+	if p.TriggerType == "" {
+		return nil, errors.New("trigger_type is required")
+	}
+	if p.TriggerRef == "" {
+		return nil, errors.New("trigger_ref is required")
+	}
+	return json.Marshal(p)
+}
+
+func DecodePersonalizationRecalcPayload(b []byte) (PersonalizationRecalcPayload, error) {
+	var p PersonalizationRecalcPayload
+	if err := json.Unmarshal(b, &p); err != nil {
+		return PersonalizationRecalcPayload{}, err
+	}
+	if p.JobID == "" {
+		return PersonalizationRecalcPayload{}, errors.New("job_id is required")
+	}
+	if p.UserID == "" {
+		return PersonalizationRecalcPayload{}, errors.New("user_id is required")
+	}
+	if p.TriggerType == "" {
+		return PersonalizationRecalcPayload{}, errors.New("trigger_type is required")
+	}
+	if p.TriggerRef == "" {
+		return PersonalizationRecalcPayload{}, errors.New("trigger_ref is required")
 	}
 	return p, nil
 }

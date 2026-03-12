@@ -6,6 +6,7 @@ import (
 
 	"github.com/hibiken/asynq"
 
+	"stridewise/backend/internal/storage"
 	"stridewise/backend/internal/task"
 	"stridewise/backend/internal/training"
 )
@@ -19,6 +20,18 @@ func (f *fakeAsyncStore) UpdateAsyncJobStatus(_ context.Context, _ string, _ str
 	return nil
 }
 
+type baselineStub struct{}
+
+func (baselineStub) RecalcForTrigger(_ context.Context, _ string, _ string, _ string) (error, error) {
+	return nil, nil
+}
+
+type recStub struct{}
+
+func (recStub) Generate(_ context.Context, _ string) (storage.Recommendation, error) {
+	return storage.Recommendation{}, nil
+}
+
 func TestHandleTrainingRecalc_RequiresProcessor(t *testing.T) {
 	SetTrainingProcessor(nil)
 	payload, _ := task.EncodeTrainingRecalcPayload(task.TrainingRecalcPayload{JobID: "job-1", UserID: "u1", LogID: "log-1", Operation: "create"})
@@ -30,7 +43,7 @@ func TestHandleTrainingRecalc_RequiresProcessor(t *testing.T) {
 
 func TestHandleTrainingRecalc_UpdatesStatus(t *testing.T) {
 	store := &fakeAsyncStore{}
-	processor := training.NewProcessor(store)
+	processor := training.NewProcessor(store, baselineStub{}, recStub{})
 	SetTrainingProcessor(processor)
 
 	payload, _ := task.EncodeTrainingRecalcPayload(task.TrainingRecalcPayload{JobID: "job-1", UserID: "u1", LogID: "log-1", Operation: "create"})
