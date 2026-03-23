@@ -528,3 +528,12 @@
 - `docs/api-integration-gap-analysis.md`
 - `docs/plan/2026-03-23-api-contract-alignment-execution-plan.md`
 ----------------------------------------
+## [2026-03-23 15:21] [Feature]
+- **Change**: 纳入前端与备份前端工程源码并补充仓库忽略规则
+- **Risk Analysis**: 本次新增前端工程源码与备份目录，运行时风险主要来自前后端接口契约未完全联调；已排除node_modules以降低仓库膨胀风险。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `.gitignore`
+- `frontend`
+- `frontend-app-backup`
+----------------------------------------

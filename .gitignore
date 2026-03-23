@@ -4,3 +4,11 @@ running_page/
 backend/bin/
 backend/.env
 .worktrees/
+node_modules/
+**/node_modules/
+dist/
+build/
+.next/
+.vite/
+frontend/node_modules/
+frontend-app-backup/node_modules/
