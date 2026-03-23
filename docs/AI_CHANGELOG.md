@@ -518,3 +518,13 @@
 - `backend/internal/recommendation/processor_test.go`
 - `docs/AI_CHANGELOG.md`
 ----------------------------------------
+## [2026-03-23 15:20] [Refactor]
+- **Change**: 补充并对齐前后端API差异分析，新增契约对齐执行计划文档
+- **Risk Analysis**: 本次为文档层改动，不涉及运行时代码路径。主要风险是文档结论与后续代码实现节奏不一致，可能导致执行偏差；通过以OpenAPI为单一事实源可降低风险。
+- **Risk Level**: S2（中级: 局部功能异常、可绕过但影响效率）
+- **Changed Files**:
+- `docs/2026-03-23-backend-internal-api-inventory.md`
+- `docs/frontend-backend-api-requirements.md`
+- `docs/api-integration-gap-analysis.md`
+- `docs/plan/2026-03-23-api-contract-alignment-execution-plan.md`
+----------------------------------------
